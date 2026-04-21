@@ -132,7 +132,9 @@ secrets-scanner/
    - **Surrounding code**: Is this production config or test fixture?
    - **Conservative bias**: When uncertain, classify as CONFIRMED
 
-3. Output classification to `/tmp/scan-classified.json`:
+3. Output classification to `/tmp/scan-classified.json`.
+   
+   **CRITICAL:** You MUST preserve ALL original finding fields and add classification fields on top:
    ```json
    {
      "scan_id": "2024-01-15-001",
@@ -141,6 +143,19 @@ secrets-scanner/
      "findings": [
        {
          "finding_id": "abc123",
+         "rule_id": "aws-access-key",
+         "description": "...",
+         "file": "src/config.py",
+         "line": 42,
+         "end_line": 42,
+         "match": "AKIAIO...MPLE",
+         "secret": "***",
+         "fingerprint": "...",
+         "context": {
+           "before": ["..."],
+           "match_line": "...",
+           "after": ["..."]
+         },
          "classification": "CONFIRMED | FALSE_POSITIVE",
          "confidence": "high | medium | low",
          "reason": "Detailed explanation",
@@ -159,6 +174,8 @@ secrets-scanner/
      }
    }
    ```
+   
+   The `generate-report.py` script requires `file`, `line`, `context`, and `secret` fields to produce the report. Do NOT strip these fields.
 
 **Classification rules:**
 - **CONFIRMED**: Real secret in production context, standard format, no indicators of being example/placeholder
@@ -185,46 +202,71 @@ secrets-scanner/
 
 **Executed by:** AI Agent (you)
 
-**Trigger:** After every scan, if false_positives > 0
+**Trigger:** After every scan, if `summary.false_positives > 0`
 
 **Your task:**
 
 1. Read all FALSE_POSITIVE entries from `/tmp/scan-classified.json`
 2. Read existing `references/rules/auto-filter-rules.toml`
-3. Analyze patterns:
-   - Group false positives by `false_positive_pattern.type`
-   - Extract common string patterns
-   - Generalize into regex allowlist rules
+3. Analyze patterns across false positives:
+   - Group by `false_positive_pattern.type`
+   - Look for common string patterns in `secret` and `match` fields
+   - Review `context` to understand why each was marked false positive
+   - Identify generalizable regex patterns
 
-4. Generate new allowlist rules:
+4. Generate new allowlist rules. For each distinct pattern:
    ```toml
    # Auto-generated: 2024-01-15T10:35:00Z
-   # Source: scan-2024-01-15-001, 35 false positives analyzed
-   # Status: [experimental] - requires 3 validation scans
-
+   # Source: scan-2024-01-15-001, {count} false positives analyzed
+   # Pattern: {brief description}
+   
    [[rules]]
-   id = "auto-filter-placeholder-20240115"
-   description = "Filter <PLACEHOLDER> patterns (20 matches in scan-001)"
+   id = "auto-filter-{pattern-type}-{date}"
+   description = "Filter {pattern description} ({count} matches in scan-{id})"
    status = "experimental"
    created = "2024-01-15"
    validation_count = 0
+   source_scans = ["001"]
    [allowlist]
    regexes = [
-     '''<[^>]+>''',
+     '''{generated regex}''',
    ]
    ```
 
 5. Append new rules to `references/rules/auto-filter-rules.toml`
+   - Only add rules for patterns not already covered
+   - Update `last_updated` timestamp
+
 6. Manage `.learning/` directory:
-   - Write this scan's false positives to `.learning/scan-{NNN}-false-positives.json`
-   - If > 3 files, delete oldest and regenerate summary rules
+   - Get current scan number from `.learning/` contents (001, 002, or 003)
+   - Write this scan's false positives to `.learning/scan-{NNN}-false-positives.json`:
+     ```json
+     {
+       "scan_id": "2024-01-15-001",
+       "timestamp": "2024-01-15T10:30:00Z",
+       "false_positives": [
+         {
+           "finding_id": "...",
+           "rule_id": "...",
+           "file": "...",
+           "line": 0,
+           "secret": "...",
+           "match": "...",
+           "reason": "...",
+           "pattern_type": "..."
+         }
+       ]
+     }
+     ```
+   - If this creates a 4th file, delete the oldest one before writing
 
 **Rule generation guidelines:**
 - Only add allowlist rules (regexes, paths, stopswords)
-- Never modify base detection rules
-- Prefer specific patterns over broad ones
-- Include `description` explaining the source
-- Tag with `[experimental]` status and `validation_count = 0`
+- Never modify base detection rules in `gitleaks-base.toml`
+- Prefer specific patterns over broad ones (avoid over-filtering)
+- Include clear `description` explaining the pattern and source
+- Always start with `status = "experimental"` and `validation_count = 0`
+- Test that your regex compiles (basic sanity check)
 
 ### Phase 6: Rule Lifecycle Validation (Python script)
 
