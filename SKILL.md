@@ -38,9 +38,10 @@ secrets-scanner/
     generate-report.py              # Generate Markdown from classified results
     rule-validator.py               # Validate regexes, manage rule lifecycle
   references/
+    classification-guide.md           # Detailed classification logic by secret type
     rules/
-      gitleaks-base.toml            # Base detection rules (read-only)
-      auto-filter-rules.toml        # AI-generated allowlist rules
+      gitleaks-base.toml              # Base detection rules (read-only)
+      auto-filter-rules.toml          # AI-generated allowlist rules
   tools/
     gitleaks-{platform}             # Detection engine binary
     manifest.json                   # Version tracking
@@ -123,16 +124,54 @@ secrets-scanner/
 
 **Your task:** Read `/tmp/scan-findings.json` and classify each finding.
 
+**Quick Reference:** For detailed classification logic by secret type (API Key, Password, Token, etc.), read `references/classification-guide.md`.
+
 **Instructions:**
-1. Read the file using your file tool
-2. For each finding, analyze the code context:
+1. Read `/tmp/scan-findings.json` using your file tool
+2. Read `references/classification-guide.md` for detailed type-specific logic
+3. For each finding, analyze the code context:
    - **Variable names**: Does it contain "test", "mock", "example", "fake"?
    - **Comments**: Any "TODO", "FIXME", "example", "placeholder" nearby?
    - **Value patterns**: Is it a real-format key (AKIA..., ghp_..., sk-...) or obvious placeholder (<API_KEY>, xxxxxx, 123456)?
    - **Surrounding code**: Is this production config or test fixture?
    - **Conservative bias**: When uncertain, classify as CONFIRMED
 
-3. Output classification to `/tmp/scan-classified.json`.
+**Few-Shot Examples:**
+
+```python
+# Example 1: CONFIRMED - Real API key in production
+# File: src/payments.py
+stripe.api_key = "sk_live_ABC123EXAMPLE_fake_key_for_demo"
+# Analysis: Valid sk_live_ prefix, long random suffix, production file
+# → CONFIRMED
+
+# Example 2: FALSE_POSITIVE - Test credential in test file
+# File: tests/test_auth.py
+def test_login(self):
+    # Using test credentials
+    test_password = "password123"
+# Analysis: test_ prefix, test file path, explicit test comment
+# → FALSE_POSITIVE (pattern: test_data)
+
+# Example 3: CONFIRMED - Weak password in ambiguous context (conservative)
+# File: config/settings.py
+DATABASE_PASSWORD = "admin123"
+# Analysis: No test markers, real variable name, config file
+# → CONFIRMED (when uncertain, be conservative)
+
+# Example 4: FALSE_POSITIVE - Placeholder in documentation
+# File: README.md
+curl -H "Api-Key: YOUR_API_KEY_HERE"
+# Analysis: YOUR_ prefix + _HERE suffix, documentation file
+# → FALSE_POSITIVE (pattern: placeholder)
+
+# Example 5: FALSE_POSITIVE - AWS official sample key
+aws_key = "AKIAIOSFODNN7EXAMPLE"
+# Analysis: AKIA prefix but ends with EXAMPLE (AWS official doc sample)
+# → FALSE_POSITIVE (AWS sample keys use EXAMPLE suffix)
+```
+
+4. Output classification to `/tmp/scan-classified.json`.
    
    **CRITICAL:** You MUST preserve ALL original finding fields and add classification fields on top:
    ```json
