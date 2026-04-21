@@ -81,6 +81,9 @@ def generate_report(classified_data, output_dir=None):
     confirmed = [f for f in all_findings if f.get("classification") == "CONFIRMED"]
     false_positives = [f for f in all_findings if f.get("classification") == "FALSE_POSITIVE"]
     
+    print(f"[INFO] Confirmed findings: {len(confirmed)}", file=sys.stderr)
+    print(f"[INFO] False positives filtered: {len(false_positives)}", file=sys.stderr)
+    
     # Group confirmed by severity
     high_risk = []
     medium_risk = []
