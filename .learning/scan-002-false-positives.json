@@ -1,0 +1,56 @@
+{
+  "scan_id": "20260421-091632",
+  "timestamp": "2026-04-21T09:16:32Z",
+  "false_positives": [
+    {
+      "finding_id": "20289d53",
+      "rule_id": "curl-auth-header",
+      "file": "README.md",
+      "line": 92,
+      "secret": "YOUR_API_TOKEN_HERE",
+      "match": "curl -H 'Api-Token: YOUR_API_TOKEN_HERE'",
+      "reason": "Placeholder value in documentation example",
+      "pattern_type": "placeholder"
+    },
+    {
+      "finding_id": "d9a9dafa",
+      "rule_id": "curl-auth-header",
+      "file": "example_project/README.md",
+      "line": 54,
+      "secret": "YOUR_API_TOKEN",
+      "match": "curl -H 'Api-Token: YOUR_API_TOKEN'",
+      "reason": "Placeholder value in documentation curl example",
+      "pattern_type": "placeholder"
+    },
+    {
+      "finding_id": "855c3e49",
+      "rule_id": "curl-auth-header",
+      "file": "example_project/README.md",
+      "line": 51,
+      "secret": "YOUR_API_KEY_HERE",
+      "match": "curl -H 'Api-Key: YOUR_API_KEY_HERE'",
+      "reason": "Placeholder value in documentation curl example",
+      "pattern_type": "placeholder"
+    },
+    {
+      "finding_id": "be02873a",
+      "rule_id": "curl-auth-header",
+      "file": "example_project/README.md",
+      "line": 56,
+      "secret": "YOUR_API_TOKEN",
+      "match": "curl -H 'Api-Token: YOUR_API_TOKEN'",
+      "reason": "Placeholder value in documentation curl example",
+      "pattern_type": "placeholder"
+    },
+    {
+      "finding_id": "f6420928",
+      "rule_id": "curl-auth-header",
+      "file": "README.md",
+      "line": 95,
+      "secret": "YOUR_API_KEY_HERE",
+      "match": "curl -H 'Api-Key: YOUR_API_KEY_HERE'",
+      "reason": "Placeholder value in README documentation curl example",
+      "pattern_type": "placeholder"
+    }
+  ]
+}

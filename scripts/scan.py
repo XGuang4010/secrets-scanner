@@ -179,6 +179,15 @@ def extract_context(repo_path, file_rel, line_num, radius=5):
 
     # 1-indexed to 0-indexed
     idx = line_num - 1
+
+    # Handle edge case: empty file or line number out of range
+    if not lines or idx < 0 or idx >= len(lines):
+        return {
+            "before": [],
+            "match_line": f"[Line {line_num} out of range in {file_rel}]",
+            "after": [],
+        }
+
     start = max(0, idx - radius)
     end = min(len(lines), idx + radius + 1)
 

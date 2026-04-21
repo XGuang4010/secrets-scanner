@@ -1,5 +1,5 @@
 title = "AI-Generated Filter Rules"
-last_updated = "2026-04-21T08:47:51.424891+00:00"
+last_updated = "2026-04-21T09:20:40.963528+00:00"
 
 [[rules]]
 id = "auto-filter-test-prefix-20260421"
@@ -23,4 +23,21 @@ source_scans = ["20260421-084500"]
 [allowlist]
 regexes = [
   '''mock_[a-zA-Z0-9_]+\s*=\s*["\'][^"\']+["\']''',
+]
+
+# Auto-generated: 2026-04-21T09:20:00Z
+# Source: scan-20260421-091632, 5 false positives analyzed
+# Pattern: YOUR_* placeholder values in documentation curl examples
+
+[[rules]]
+id = "auto-filter-your-placeholder-20260421"
+description = "Filter YOUR_* placeholder values commonly used in documentation examples (5 matches in scan-002)"
+status = "experimental"
+created = "2026-04-21"
+validation_count = 0
+source_scans = ["002"]
+[allowlist]
+regexes = [
+  '''YOUR_[A-Z_]+''',
+  '''YOUR_[A-Z_]+_HERE''',
 ]
