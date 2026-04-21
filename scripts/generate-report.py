@@ -1,193 +1,249 @@
 #!/usr/bin/env python3
-"""Generate Markdown reports from gitleaks JSON output."""
+"""
+Generate Markdown report from AI-classified scan results.
+
+Only CONFIRMED findings are included in the report.
+FALSE_POSITIVE findings are skipped (they're used for auto-learning instead).
+
+Usage:
+  python scripts/generate-report.py /tmp/scan-classified.json
+  
+Output:
+  Prints path to generated Markdown report
+"""
 
 import json
-import os
 import sys
-from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
 
-def load_findings(json_paths):
-    """Load and deduplicate findings from one or more gitleaks JSON files."""
-    findings = []
-    seen = set()
-    for path in json_paths:
-        p = Path(path)
-        if not p.exists():
-            print(f"WARNING: JSON file not found: {path}", file=sys.stderr)
-            continue
-        try:
-            with open(p, "r", encoding="utf-8") as f:
-                data = json.load(f)
-        except json.JSONDecodeError as e:
-            print(f"WARNING: Failed to parse {path}: {e}", file=sys.stderr)
-            continue
-        if isinstance(data, dict):
-            items = data.get("findings", [])
-        elif isinstance(data, list):
-            items = data
-        else:
-            print(f"WARNING: Unexpected JSON structure in {path}", file=sys.stderr)
-            continue
-        for item in items:
-            fp = item.get("Fingerprint", "")
-            if not fp:
-                fp = f"{item.get('File','')}:{item.get('RuleID','')}:{item.get('StartLine','')}"
-            if fp not in seen:
-                seen.add(fp)
-                item["_source_file"] = str(p)
-                findings.append(item)
-    return findings
-
-
 def mask_secret(value):
-    """Mask a secret: first 4 + **** + last 4 if length > 8, else ****."""
-    if not value or value == "***":
+    """Mask a secret for display: first 4 + **** + last 4."""
+    if not value:
         return "****"
     if len(value) > 8:
         return value[:4] + "****" + value[-4:]
     return "****"
 
 
-def extract_match_secret(finding):
-    """Extract the best secret value to mask from a finding."""
-    secret = finding.get("Secret", "")
-    if secret and secret != "***":
-        return secret
-    match = finding.get("Match", "")
-    if not match:
-        return ""
-    # Try to extract just the value portion from patterns like KEY="value"
-    if "=" in match:
-        parts = match.split("=", 1)
-        val = parts[1].strip().strip('"').strip("'")
-        if val:
-            return val
-    return match
+def get_severity(rule_id, description):
+    """Determine severity based on rule type."""
+    high_severity = ["aws", "gcp", "azure", "github", "gitlab", "slack", "stripe", "openai"]
+    medium_severity = ["generic", "password", "secret", "token"]
+    
+    rule_lower = rule_id.lower()
+    desc_lower = description.lower()
+    
+    for keyword in high_severity:
+        if keyword in rule_lower or keyword in desc_lower:
+            return "HIGH"
+    
+    for keyword in medium_severity:
+        if keyword in rule_lower or keyword in desc_lower:
+            return "MEDIUM"
+    
+    return "LOW"
 
 
-def get_context(repo_path, finding):
-    """Extract +/- 3 lines around the finding with line numbers."""
-    file_rel = finding.get("File", "")
-    start_line = finding.get("StartLine", 1)
-    end_line = finding.get("EndLine", start_line)
-    file_path = Path(repo_path) / file_rel
-
-    if not file_path.exists():
-        return f"[File not found: {file_rel}]"
-
-    try:
-        with open(file_path, "r", encoding="utf-8", errors="replace") as f:
-            lines = f.readlines()
-    except Exception as e:
-        return f"[Error reading {file_rel}: {e}]"
-
-    # Determine line range (1-indexed)
-    ctx_start = max(1, start_line - 3)
-    ctx_end = min(len(lines), end_line + 3)
-
-    result = []
-    for i in range(ctx_start, ctx_end + 1):
-        line_text = lines[i - 1].rstrip("\n\r")
-        marker = ">>> " if start_line <= i <= end_line else "    "
-        result.append(f"{marker}{i:4d} | {line_text}")
-
-    return "\n".join(result)
+def format_context(context):
+    """Format code context for Markdown display."""
+    lines = []
+    
+    for line in context.get("before", []):
+        lines.append(f"     {line}")
+    
+    match_line = context.get("match_line", "")
+    if match_line:
+        lines.append(f"  >>> {match_line}")
+    
+    for line in context.get("after", []):
+        lines.append(f"     {line}")
+    
+    return "\n".join(lines)
 
 
-def generate_markdown(repo_path, findings, output_dir):
-    """Generate a Markdown report from findings."""
-    output_dir = Path(output_dir)
+def generate_report(classified_data, output_dir=None):
+    """Generate Markdown report from classified findings."""
+    if output_dir is None:
+        output_dir = Path("/tmp")
+    else:
+        output_dir = Path(output_dir)
+    
     output_dir.mkdir(parents=True, exist_ok=True)
-
-    scan_date = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-    total = len(findings)
-
-    # Determine counts per source file
-    source_counts = defaultdict(int)
-    for f in findings:
-        src = f.get("_source_file", "unknown")
-        source_counts[src] += 1
-
-    # Group by RuleID
-    rule_groups = defaultdict(list)
-    for f in findings:
-        rule_groups[f.get("RuleID", "Unknown")].append(f)
-
-    # Sort rule groups by RuleID for consistent output
-    sorted_rules = sorted(rule_groups.keys())
-
+    
+    scan_id = classified_data.get("scan_id", "unknown")
+    repo_path = classified_data.get("repo_path", "unknown")
+    timestamp = classified_data.get("timestamp", datetime.now().isoformat())
+    all_findings = classified_data.get("findings", [])
+    
+    # Filter to only CONFIRMED findings
+    confirmed = [f for f in all_findings if f.get("classification") == "CONFIRMED"]
+    false_positives = [f for f in all_findings if f.get("classification") == "FALSE_POSITIVE"]
+    
+    # Group confirmed by severity
+    high_risk = []
+    medium_risk = []
+    low_risk = []
+    
+    for f in confirmed:
+        severity = get_severity(f.get("rule_id", ""), f.get("description", ""))
+        f["_severity"] = severity
+        if severity == "HIGH":
+            high_risk.append(f)
+        elif severity == "MEDIUM":
+            medium_risk.append(f)
+        else:
+            low_risk.append(f)
+    
     lines = []
     lines.append("# Secrets Scan Report")
     lines.append("")
     lines.append(f"**Repository:** `{repo_path}`")
-    lines.append(f"**Scan Date:** {scan_date}")
+    lines.append(f"**Scan ID:** `{scan_id}`")
+    lines.append(f"**Scan Date:** {timestamp}")
     lines.append("")
+    
+    # Summary
     lines.append("## Summary")
     lines.append("")
-    lines.append("| Source | Findings |")
-    lines.append("|--------|----------|")
-    for src, count in sorted(source_counts.items()):
-        name = Path(src).name
-        lines.append(f"| {name} | {count} |")
-    lines.append(f"| **Total Unique** | **{total}** |")
+    lines.append("| Category | Count |")
+    lines.append("|----------|-------|")
+    lines.append(f"| **Confirmed Leaks** | **{len(confirmed)}** |")
+    lines.append(f"| - High Severity | {len(high_risk)} |")
+    lines.append(f"| - Medium Severity | {len(medium_risk)} |")
+    lines.append(f"| - Low Severity | {len(low_risk)} |")
+    lines.append(f"| False Positives (filtered) | {len(false_positives)} |")
+    lines.append(f"| **Total Raw Findings** | {len(all_findings)} |")
     lines.append("")
-
-    lines.append("## Findings by Rule")
-    lines.append("")
-
-    for rule_id in sorted_rules:
-        group = rule_groups[rule_id]
-        lines.append(f"### {rule_id} ({len(group)})")
+    
+    if not confirmed:
+        lines.append("> **No confirmed secrets detected.**")
+        lines.append("> ")
+        lines.append(f"> {len(false_positives)} potential findings were analyzed and classified as false positives.")
         lines.append("")
-        for f in group:
-            file_rel = f.get("File", "unknown")
-            line_num = f.get("StartLine", 0)
-            secret_raw = extract_match_secret(f)
-            masked = mask_secret(secret_raw)
-            desc = f.get("Description", "")
-            lines.append(f"- `{file_rel}:{line_num}` -- `{masked}`")
-            if desc:
-                lines.append(f"  - **Description:** {desc}")
-            ctx = get_context(repo_path, f)
-            lines.append("  - **Context:**")
-            lines.append("    ```")
-            for ctx_line in ctx.splitlines():
-                lines.append(f"    {ctx_line}")
-            lines.append("    ```")
+    
+    # Findings by severity
+    if confirmed:
+        lines.append("## Findings by Severity")
+        lines.append("")
+        
+        if high_risk:
+            lines.append(f"### 🔴 HIGH ({len(high_risk)})")
             lines.append("")
-
+            for f in high_risk:
+                lines.extend(format_finding(f))
+        
+        if medium_risk:
+            lines.append(f"### 🟡 MEDIUM ({len(medium_risk)})")
+            lines.append("")
+            for f in medium_risk:
+                lines.extend(format_finding(f))
+        
+        if low_risk:
+            lines.append(f"### 🟢 LOW ({len(low_risk)})")
+            lines.append("")
+            for f in low_risk:
+                lines.extend(format_finding(f))
+    
+    # Recommendations
     lines.append("## Recommendations")
     lines.append("")
-    lines.append("1. Rotate any exposed credentials immediately.")
-    lines.append("2. Move secrets to environment variables or secret management systems.")
-    lines.append("3. Add `.env` files and secret configs to `.gitignore`.")
-    lines.append("4. Review historical commits for previously leaked secrets.")
+    
+    if confirmed:
+        lines.append("### Immediate Actions")
+        lines.append("")
+        lines.append("1. **Rotate exposed credentials immediately**")
+        lines.append("   - Invalidate leaked keys/tokens via provider dashboard")
+        lines.append("   - Generate new credentials")
+        lines.append("   - Update applications with new credentials")
+        lines.append("")
+        lines.append("2. **Audit access logs**")
+        lines.append("   - Check if leaked credentials were used by unauthorized parties")
+        lines.append("   - Look for suspicious activity")
+        lines.append("")
+        
+        lines.append("### Prevention")
+        lines.append("")
+        lines.append("1. **Use environment variables** for all secrets")
+        lines.append("2. **Add `.env` files to `.gitignore`** before committing")
+        lines.append("3. **Use secret scanning pre-commit hooks** (gitleaks, detect-secrets)")
+        lines.append("4. **Review historical commits** for previously leaked secrets:")
+        lines.append(f"   ```bash")
+        lines.append(f"   cd {repo_path}")
+        lines.append(f"   git log --all --full-history --source -- '*.env' '*.key' '*secret*'")
+        lines.append(f"   ```")
+    else:
+        lines.append("- Continue using pre-commit hooks to prevent future leaks")
+        lines.append("- Store all secrets in environment variables or secret management systems")
+        lines.append("- Never commit `.env` files or configuration files with hardcoded credentials")
+    
     lines.append("")
+    
+    # Auto-learning note
+    if false_positives:
+        lines.append("---")
+        lines.append("")
+        lines.append("*This scan analyzed " + str(len(false_positives)) + " potential findings and classified them as false positives. " + "The AI will generate/update allowlist rules to filter similar patterns in future scans.*")
+    
+    # Write report
+    report_path = output_dir / f"secrets-report-{scan_id}.md"
+    report_path.write_text("\n".join(lines), encoding="utf-8")
+    
+    return report_path
 
-    md_path = output_dir / "secrets-report.md"
-    md_path.write_text("\n".join(lines), encoding="utf-8")
-    return md_path
+
+def format_finding(finding):
+    """Format a single finding for the report."""
+    lines = []
+    
+    rule_id = finding.get("rule_id", "unknown")
+    description = finding.get("description", "")
+    file_path = finding.get("file", "unknown")
+    line_num = finding.get("line", 0)
+    secret = finding.get("secret", "")
+    masked = mask_secret(secret)
+    reason = finding.get("reason", "")
+    context = finding.get("context", {})
+    
+    lines.append(f"**{rule_id}** - {description}")
+    lines.append("")
+    lines.append(f"- **Location:** `{file_path}:{line_num}`")
+    lines.append(f"- **Masked Value:** `{masked}`")
+    if reason:
+        lines.append(f"- **Classification Reason:** {reason}")
+    lines.append("")
+    lines.append("- **Context:**")
+    lines.append("  ```")
+    for ctx_line in format_context(context).split("\n"):
+        lines.append(f"  {ctx_line}")
+    lines.append("  ```")
+    lines.append("")
+    
+    return lines
 
 
 def main():
-    if len(sys.argv) < 4:
-        print("Usage: python3 generate-report.py <repo_path> <output_dir> <json_file1> [json_file2 ...]", file=sys.stderr)
+    if len(sys.argv) < 2:
+        print("Usage: python3 generate-report.py <scan-classified.json> [output-dir]", file=sys.stderr)
         sys.exit(1)
-
-    repo_path = sys.argv[1]
-    output_dir = sys.argv[2]
-    json_files = sys.argv[3:]
-
-    findings = load_findings(json_files)
-    if not findings:
-        print("No findings to report.", file=sys.stderr)
-        # Still generate an empty report
-
-    md_path = generate_markdown(repo_path, findings, output_dir)
-    print(str(md_path))
+    
+    input_path = Path(sys.argv[1])
+    output_dir = sys.argv[2] if len(sys.argv) > 2 else None
+    
+    if not input_path.exists():
+        print(f"ERROR: Input file not found: {input_path}", file=sys.stderr)
+        sys.exit(1)
+    
+    try:
+        with open(input_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except json.JSONDecodeError as e:
+        print(f"ERROR: Failed to parse JSON: {e}", file=sys.stderr)
+        sys.exit(1)
+    
+    report_path = generate_report(data, output_dir)
+    print(str(report_path))
 
 
 if __name__ == "__main__":
