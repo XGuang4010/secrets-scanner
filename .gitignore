@@ -1,0 +1,17 @@
+# Gitleaks precompiled binaries
+tools/gitleaks-*
+
+# Temporary files
+/tmp/
+*.tmp
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
