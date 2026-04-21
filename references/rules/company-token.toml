@@ -1,0 +1,14 @@
+title = "Company Custom Rules"
+
+[[rules]]
+id = "company-api-token"
+description = "Company Internal API Token"
+regex = '''sk-internal-[a-zA-Z0-9]{32}'''
+tags = ["apikey", "company"]
+entropy = 3.5
+
+[[rules]]
+id = "company-db-password"
+description = "Database Password Pattern"
+regex = '''(?i)db_password\s*=\s*["\'][^"\']+["\']'''
+tags = ["database", "password"]

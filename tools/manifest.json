@@ -1,0 +1,10 @@
+{
+  "current_version": "8.30.1",
+  "source": "github.com/zricethezav/gitleaks",
+  "binaries": {
+    "linux-x86_64": "gitleaks-linux-x64",
+    "linux-aarch64": "gitleaks-linux-arm64",
+    "darwin-x86_64": "gitleaks-darwin-x64",
+    "darwin-arm64": "gitleaks-darwin-arm64"
+  }
+}
