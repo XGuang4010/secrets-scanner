@@ -1,0 +1,91 @@
+---
+pattern_id: semantic-jwt-analysis
+pattern_name: "JWT Token Semantic Analysis"
+version: 1
+created: "2026-04-21"
+last_updated: "2026-04-21"
+validated_scans: 2
+hit_count: 7
+
+# 触发条件
+trigger_rules:
+  - jwt
+  - generic-api-key
+
+# 判断逻辑
+decision_tree:
+  - step: 1
+    name: "check_structure"
+    description: "JWT 应该有 3 个部分用 . 分隔 (header.payload.signature)"
+    check: "match.count('.') >= 2"
+    
+  - step: 2
+    name: "decode_header"
+    description: "尝试 base64 解码 header 部分，检查是否为有效 JSON"
+    action: "base64_decode_first_part"
+    expected: "JSON with 'alg' and 'typ' fields"
+    
+  - step: 3
+    name: "check_truncation"
+    description: "检查 JWT 是否被截断（通常以 ... 结尾或在文档中）"
+    signals:
+      - "match 包含 '...' 或 '···'"
+      - "match 长度 < 50 字符"
+      - "上下文中有 'example' 或 'sample'"
+    judgment_if_match: "FALSE_POSITIVE"
+    confidence: "high"
+    reason: "被截断的 JWT 是文档示例，不是真实密钥"
+    
+  - step: 4
+    name: "check_file_context"
+    description: "检查文件类型和位置"
+    contexts:
+      - type: "postman_collection"
+        patterns:
+          - ".*postman.*\\.json"
+          - ".*\\.postman_collection\\.json"
+        judgment: "FALSE_POSITIVE"
+        confidence: "high"
+        reason: "Postman 集合中的 JWT 是测试用例"
+        
+      - type: "documentation"
+        patterns:
+          - ".*docs/.*"
+          - ".*\\.md$"
+          - ".*README.*"
+        judgment: "FALSE_POSITIVE"
+        confidence: "medium"
+        reason: "文档中的 JWT 通常是示例或被截断的"
+        
+      - type: "test_code"
+        patterns:
+          - ".*_test\\.go"
+          - ".*Test\\.java"
+          - ".*test_.*"
+        judgment: "FALSE_POSITIVE"
+        confidence: "medium"
+        reason: "测试代码中的 JWT 通常是测试数据"
+        
+      - type: "production_source"
+        patterns:
+          - ".*src/.*"
+          - ".*main/.*"
+          - ".*app/.*"
+        judgment: "NEEDS_REVIEW"
+        confidence: "low"
+        reason: "生产代码中的 JWT 可能是真实密钥，需要进一步检查"
+
+# 从语义规则提炼死规则（给 gitleaks）
+dead_rule_derivation:
+  allowlist_paths:
+    - ".*postman.*\\.json"
+    - ".*\\.postman_collection\\.json"
+  allowlist_regexes:
+    - "eyJ[A-Za-z0-9_-]*\\.eyJ[A-Za-z0-9_-]*\\.{3,}"
+
+# 命中统计
+hit_stats:
+  total_hits: 7
+  confirmed_as_fp: 7
+  confirmed_as_real: 0
+  last_hit_scan: "batch-20260421"

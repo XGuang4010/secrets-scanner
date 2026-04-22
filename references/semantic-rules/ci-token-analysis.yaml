@@ -1,0 +1,86 @@
+---
+pattern_id: semantic-ci-token-analysis
+pattern_name: "CI/CD Service Token Analysis"
+version: 1
+created: "2026-04-21"
+last_updated: "2026-04-21"
+validated_scans: 2
+hit_count: 4
+
+trigger_rules:
+  - generic-api-key
+
+decision_tree:
+  - step: 1
+    name: "identify_service"
+    description: "识别令牌属于哪个 CI/代码覆盖服务"
+    service_patterns:
+      - name: "Codecov"
+        indicators:
+          - "CODECOV_TOKEN"
+        token_format: "UUID format (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)"
+        judgment: "CONFIRMED"
+        confidence: "high"
+        reason: "Codecov token 是真实的 CI 服务认证令牌，提交到代码库中是严重泄露"
+        
+      - name: "Coveralls"
+        indicators:
+          - ".coveralls.yml"
+          - "repo_token"
+        token_format: "22位随机字符串"
+        judgment: "CONFIRMED"
+        confidence: "high"
+        reason: "Coveralls repo_token 是仓库认证令牌，提交到代码库中是严重泄露"
+        
+      - name: "GitHub Actions"
+        indicators:
+          - "GITHUB_TOKEN"
+          - "ghp_"
+          - "gho_"
+        token_format: "ghp_ 或 gho_ 前缀 + 36位字符"
+        judgment: "CONFIRMED"
+        confidence: "high"
+        reason: "GitHub token 是仓库访问令牌，泄露后可被恶意利用"
+
+  - step: 2
+    name: "check_file_location"
+    description: "检查令牌所在的文件位置"
+    contexts:
+      - type: "github_workflow"
+        patterns:
+          - ".github/workflows/.*"
+        judgment: "CONFIRMED"
+        confidence: "high"
+        reason: "GitHub Actions workflow 中的 token 虽然通常通过 secrets 传入，但硬编码仍然是泄露"
+        
+      - type: "ci_config"
+        patterns:
+          - ".coveralls.yml"
+          - ".codecov.yml"
+          - ".travis.yml"
+          - ".circleci/.*"
+        judgment: "CONFIRMED"
+        confidence: "high"
+        reason: "CI 配置文件中的 token 是真实的服务认证信息"
+        
+      - type: "environment_file"
+        patterns:
+          - ".env"
+          - ".env.*"
+          - "*.env"
+        judgment: "CONFIRMED"
+        confidence: "high"
+        reason: "环境变量文件中的 token 通常是真实的"
+        exception: ".env.example 或 .env.template 可能包含占位符"
+
+dead_rule_derivation:
+  # CI token 通常不应该被过滤，因为它们几乎总是真实的
+  # 但可以检测 .env.example 中的占位符
+  allowlist_regexes:
+    - "YOUR_CODECOV_TOKEN|EXAMPLE_CODECOV|REPLACE_WITH_.*"
+
+hit_stats:
+  total_hits: 4
+  confirmed_as_fp: 0
+  confirmed_as_real: 4
+  last_hit_scan: "batch-20260421"
