@@ -443,6 +443,39 @@ aws_key = "AKIAIOSFODNN7EXAMPLE"
 3. Validate all regexes compile correctly
 4. Remove rules that haven't validated after 10 scans (orphaned rules)
 
+### Phase 7: Secret Validity Verification (Python script, Optional)
+
+**Executed by:** `python scripts/verify-secrets.py /tmp/scan-classified.json [--output /tmp/scan-verified.json]`
+
+**Trigger:** Optional step after report generation. User can run manually to validate confirmed secrets via read-only network requests.
+
+**Validators implemented:**
+- `aws-access-key` → AWS STS GetCallerIdentity (SigV4 signed, read-only)
+- `generic-api-key` (Hyundai Bluelink context) → device registration probe (read-only)
+- `generic-api-key` (Stripe context) → Stripe charges list probe (read-only)
+- `generic-api-key` (WeChat Pay / Fiat / unknown) → format/entropy checks or `NOT_TESTABLE`
+
+**Safety constraints:**
+- All network requests are read-only (no writes, no charges, no vehicle control)
+- 10-second timeout per request
+- Max 1 request per second globally
+- Batch scans limited to 20 findings
+- On any error → `UNKNOWN`, never crash
+- Secrets are masked in all logs
+
+**Output:** Adds a `validity` field to each CONFIRMED finding in the JSON:
+```json
+{
+  "validity": {
+    "status": "VALID | INVALID | UNKNOWN | NOT_TESTABLE",
+    "tested_at": "2026-04-22T06:00:00Z",
+    "validator": "hyundai-bluelink",
+    "detail": "Device registration succeeded, deviceId returned",
+    "http_status": 200
+  }
+}
+```
+
 ## State Management
 
 ### .learning/ Directory (Max 3 scans retained)
