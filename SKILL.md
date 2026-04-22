@@ -36,6 +36,7 @@ secrets-scanner/
   scripts/
     scan.py                         # Orchestrator: run gitleaks, prepare data
     generate-report.py              # Generate Markdown from classified results
+    verify-secrets.py               # Validate confirmed secrets via read-only network probes
     rule-validator.py               # Validate regexes, manage rule lifecycle
     semantic-rule-stats.py          # Semantic rules statistics and reporting
     batch-scan.py                   # Batch scan multiple repositories
@@ -79,6 +80,7 @@ secrets-scanner/
 |---------|--------|
 | `/scan-secrets <repo-path>` | Full scan with AI classification and auto-learning |
 | `/scan-secrets validate-rules` | Check experimental rules, promote validated ones |
+| `/scan-secrets verify` | Validate confirmed secrets via read-only network probes |
 | `/scan-secrets reset-learning` | Clear .learning/ and auto-filter-rules.toml |
 
 ## Workflow
@@ -443,22 +445,32 @@ aws_key = "AKIAIOSFODNN7EXAMPLE"
 3. Validate all regexes compile correctly
 4. Remove rules that haven't validated after 10 scans (orphaned rules)
 
-### Phase 7: Secret Validity Verification (Python script, Optional)
+### Phase 7: Secret Validity Verification (Plugin-based, Optional)
+
+**Architecture:** Plugin-based framework. The CLI entry point (`verify-secrets.py`) handles routing, rate limiting, timeout, and error recovery. Each secret type validator is an independent plugin in `verify_plugins/`.
 
 **Executed by:** `python scripts/verify-secrets.py /tmp/scan-classified.json [--output /tmp/scan-verified.json]`
 
 **Trigger:** Optional step after report generation. User can run manually to validate confirmed secrets via read-only network requests.
 
+**Plugin registry** (`scripts/verify_plugins/__init__.py`) maps `rule_id` → validator module:
+- `aws-access-key` / `aws-secret-access-key` → `verify_plugins/aws.py`
+- `generic-api-key` → `verify_plugins/generic.py` (dispatcher, routes by context)
+- `private-key` / `jwt` → `verify_plugins/generic.py` (returns `NOT_TESTABLE`)
+
 **Validators implemented:**
-- `aws-access-key` → AWS STS GetCallerIdentity (SigV4 signed, read-only)
+- `aws-access-key` / `aws-secret-access-key` → AWS STS GetCallerIdentity (SigV4 signed, read-only)
 - `generic-api-key` (Hyundai Bluelink context) → device registration probe (read-only)
 - `generic-api-key` (Stripe context) → Stripe charges list probe (read-only)
 - `generic-api-key` (WeChat Pay / Fiat / unknown) → format/entropy checks or `NOT_TESTABLE`
+- `private-key` / `jwt` → `NOT_TESTABLE` (cannot be validated via network probes)
 
-**Safety constraints:**
+**Generic fallback:** For unregistered rule types, performs JWT structure check and entropy analysis. Low entropy (< 0.5 normalized) → `INVALID` (likely placeholder).
+
+**Safety constraints (enforced by framework layer):**
 - All network requests are read-only (no writes, no charges, no vehicle control)
-- 10-second timeout per request
-- Max 1 request per second globally
+- 10-second timeout per request (`ThreadPoolExecutor`)
+- Max 1 request per second globally (`rate_limit()`)
 - Batch scans limited to 20 findings
 - On any error → `UNKNOWN`, never crash
 - Secrets are masked in all logs
@@ -475,6 +487,8 @@ aws_key = "AKIAIOSFODNN7EXAMPLE"
   }
 }
 ```
+
+**Adding a new validator:** See `references/procedures/verify-plugins.md` for the plugin interface contract, step-by-step guide, and safety requirements.
 
 ## State Management
 
@@ -563,6 +577,7 @@ For each finding, analyze:
 | AI classification fails | Fallback: report all findings (conservative) |
 | Regex validation fails | Log error, skip invalid rule, continue |
 | `.learning/` full | Delete oldest, proceed with rotation |
+| Secret validation fails | Mark as `UNKNOWN`, continue with next finding (never crash) |
 
 ## Integration Notes
 

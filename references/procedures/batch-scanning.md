@@ -128,11 +128,21 @@ Read `/tmp/batch-scan-findings.json` and classify all findings at once. The aggr
 
 ### Step 6: Generate Report
 
+**Option A: Classified results (AI-reviewed)** — Use the standard report generator:
 ```bash
 python3 scripts/generate-report.py /tmp/scan-classified.json
 ```
 
-For batch scans, the report will show aggregate statistics across all repos.
+**Option B: Raw/unclassified results** — Use the batch-optimized report generator:
+```bash
+python3 scripts/batch-generate-report.py /tmp/batch-scan-findings.json [output-dir]
+```
+
+`batch-generate-report.py` is optimized for batch scans:
+- **Chinese output**: All headers, summaries, and risk descriptions are in Chinese
+- **Code context**: Shows surrounding code for each finding
+- **Smart truncation**: Unclassified scans show first 10 findings per repo with a hint to run AI classification for the rest
+- **Valid-only detail**: When run on classified results, only `CONFIRMED` findings get full detail; `FALSE_POSITIVE` findings are counted in statistics but not listed
 
 ### Step 7: Auto-Learning (Cross-Repo Patterns)
 
@@ -269,6 +279,7 @@ New rules generated:
 | scan.py no output | gitleaks found nothing or crashed | Check `/tmp/gitleaks-raw.json` manually |
 | Empty batch findings file | All repos had 0 findings | Normal for clean repos; document the result |
 | Disk full | Cloned too many large repos | Monitor `df -h`; remove repos after scanning |
+| Report is 25MB+ | Unclassified batch scan with hundreds of findings | Use `batch-generate-report.py` instead of `generate-report.py`; truncation reduces size by 99%+ |
 
 ## Lessons from Past Batch Scans
 
@@ -297,15 +308,26 @@ New rules generated:
 - **Star-range insight:** 5000+ star repos have the highest confirmed-secret rate. Popularity correlates with real integration code that needs actual API credentials.
 - **Tooling:** `decode_utils.py` was used successfully to analyze JWT structure during classification.
 
+### Scan 2026-04-22 (20 repos, ~5000 stars, plugin-era)
+- **Multi-language:** 14 repos with findings, 6 clean. 309 total raw findings.
+- **Breakdown by rule:** `generic-api-key` (188), `private-key` (104), `curl-auth-user` (14), `jwt` (3).
+- **Top repos:** `dotenvx` (122), `x402` (101), `opencloud` (26), `pyrefly` (19), `tagspaces` (13).
+- **Unclassified mode report:** 96KB (2000 lines) after truncation optimization. Down from 25MB (8924 lines) in unoptimized mode.
+- **Learning:** High-star repos with broad language diversity produce massive raw finding volumes. Report truncation (first 10 per repo for unclassified) is essential for usability.
+- **Tooling:** `batch-generate-report.py` with Chinese output and smart truncation successfully reduced report size by 99.6%.
+
 ### Star-Range Correlation Summary
 
-Based on three batch scans across star ranges:
+Based on four batch scans across star ranges:
 
 | Star Range | Repos | Total Findings | Confirmed | FP Rate | Notes |
 |------------|-------|---------------|-----------|---------|-------|
 | ~100 | 20 | 338 | 0 | 100% | Extreme FP from testdata (RPM names, test fixtures) |
 | ~500 | 19 | 30 | 0 | 100% | Moderate FP, mostly k8s testdata TLS certs |
-| ~5000 | 18 | 80 | 22 | 72.5% | Real secrets emerge (vehicle APIs, payment keys) |
+| ~5000 (Apr 22 early) | 18 | 80 | 22 | 72.5% | Real secrets emerge (vehicle APIs, payment keys) |
+| ~5000 (Apr 22 plugin) | 20 | 309 | TBD* | TBD* | Unclassified; requires AI review for confirmation count |
+
+*309 raw findings from the plugin-era scan are pending AI classification. Pre-truncation report was 25MB; post-optimization report is 96KB.
 
 **Implication:** For scanner calibration and rule testing, use a mix of star ranges. Low-star repos are best for discovering FP patterns; high-star repos are best for discovering real secret patterns.
 

@@ -135,13 +135,47 @@ def main():
     
     with open(args.output, "w", encoding="utf-8") as f:
         json.dump(output, f, indent=2, ensure_ascii=False)
-    
+
     print(f"\n{'='*60}")
     print(f"Batch scan complete!")
     print(f"  Repos scanned: {len(results)}")
     print(f"  Total findings: {total_findings}")
     print(f"  Output: {args.output}")
     print(f"{'='*60}")
+
+    # 自动生成中文报告
+    print(f"\n[Auto] Generating report...")
+    try:
+        # 检查是否有分类后的文件
+        classified_path = TMP_DIR / "scan-classified.json"
+        if classified_path.exists():
+            # 使用 generate-report.py 处理已分类结果
+            cmd = [
+                sys.executable,
+                str(SCRIPT_DIR / "generate-report.py"),
+                str(classified_path),
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+            if result.returncode == 0:
+                report_path = result.stdout.strip()
+                print(f"  [\u2713] Classified report generated: {report_path}")
+            else:
+                print(f"  [!] generate-report.py failed: {result.stderr[:200]}")
+        else:
+            # 使用 batch-generate-report.py 处理未分类结果
+            cmd = [
+                sys.executable,
+                str(SCRIPT_DIR / "batch-generate-report.py"),
+                str(args.output),
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+            if result.returncode == 0:
+                report_path = result.stdout.strip()
+                print(f"  [\u2713] Raw report generated: {report_path}")
+            else:
+                print(f"  [!] batch-generate-report.py failed: {result.stderr[:200]}")
+    except Exception as e:
+        print(f"  [!] Auto report generation skipped: {e}")
 
 
 if __name__ == "__main__":
