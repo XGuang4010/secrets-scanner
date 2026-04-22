@@ -1,5 +1,5 @@
 title = "AI-Generated Filter Rules"
-last_updated = "2026-04-21T09:20:40.963528+00:00"
+last_updated = "2026-04-22T01:45:08.544359+00:00"
 
 [[rules]]
 id = "auto-filter-test-prefix-20260421"
@@ -40,4 +40,108 @@ source_scans = ["002"]
 regexes = [
   '''YOUR_[A-Z_]+''',
   '''YOUR_[A-Z_]+_HERE''',
+]
+
+# Auto-generated: 2026-04-21T10:30:00Z
+# Source: batch-20260421, 29 false positives from 20 repositories
+# Pattern: JWT tokens in Postman collection files (7 matches)
+
+[[rules]]
+id = "auto-filter-jwt-postman-20260421"
+description = "Filter JWT tokens in Postman collection JSON files (7 matches in batch-scan)"
+status = "experimental"
+created = "2026-04-21"
+validation_count = 0
+source_scans = ["batch-20260421"]
+[allowlist]
+paths = [
+  '''.*postman.*\.json''',
+  '''.*\.postman_collection\.json''',
+]
+
+# Auto-generated: 2026-04-21T10:30:00Z
+# Source: batch-20260421, 29 false positives from 20 repositories
+# Pattern: Documentation examples with truncated/placeholder values (16 matches)
+
+[[rules]]
+id = "auto-filter-doc-examples-20260421"
+description = "Filter truncated tokens and example values in documentation files (16 matches in batch-scan)"
+status = "experimental"
+created = "2026-04-21"
+validation_count = 0
+source_scans = ["batch-20260421"]
+[allowlist]
+regexes = [
+  '''eyJ[A-Za-z0-9_-]*\.\.\.''',
+  '''a1b2c3d4e5f6[a-z0-9\.]*''',
+  '''c5p4t0-[a-z0-9]+''',
+  '''dGhlIHNhbXBsZSBub25jZQ==''',
+]
+paths = [
+  '''.*docs/.*''',
+  '''.*\.md$''',
+  '''.*README.*''',
+  '''.*README.*''',
+]
+
+# Auto-generated: 2026-04-21T10:30:00Z
+# Source: batch-20260421, 29 false positives from 20 repositories
+# Pattern: Test certificates and development keys (6 matches)
+
+[[rules]]
+id = "auto-filter-test-certs-20260421"
+description = "Filter test certificates and private keys in test directories (6 matches in batch-scan)"
+status = "experimental"
+created = "2026-04-21"
+validation_count = 0
+source_scans = ["batch-20260421"]
+[allowlist]
+paths = [
+  '''.*test.*\.key''',
+  '''.*testdata.*''',
+  '''.*caddytest.*''',
+  '''.*_test\.go''',
+  '''.*test.*\.pem''',
+]
+
+# Auto-generated: 2026-04-21T10:30:00Z
+# Source: batch-20260421, 29 false positives from 20 repositories
+# Pattern: Recaptcha example keys and OIDC client IDs in READMEs (2 matches)
+
+[[rules]]
+id = "auto-filter-example-keys-20260421"
+description = "Filter example service keys and client IDs in documentation (2 matches in batch-scan)"
+status = "experimental"
+created = "2026-04-21"
+validation_count = 0
+source_scans = ["batch-20260421"]
+[allowlist]
+regexes = [
+  '''6LeYIbsSAAAAAJezaIq3Ft_hSTo0YtyeFG-.*''',
+  '''clientID.*=.*\"[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}\"''',
+]
+paths = [
+  '''.*README.*''',
+  '''.*examples/.*''',
+  '''.*docs/.*''',
+]
+
+# Auto-generated: 2026-04-21T10:30:00Z
+# Source: batch-20260421, 29 false positives from 20 repositories
+# Pattern: Algolia and doc search API keys in documentation assets (1 match)
+
+[[rules]]
+id = "auto-filter-docsearch-apikey-20260421"
+description = "Filter documentation search API keys in docs assets (1 match in batch-scan)"
+status = "experimental"
+created = "2026-04-21"
+validation_count = 0
+source_scans = ["batch-20260421"]
+[allowlist]
+regexes = [
+  '''api_key:\s*[\"\'][a-f0-9]{32}[\"\']''',
+]
+paths = [
+  '''.*docs/assets/.*''',
+  '''.*docs/.*\.js$''',
 ]
