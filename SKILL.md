@@ -134,6 +134,42 @@ secrets-scanner/
 **Quick Reference:**
 - For detailed classification logic by secret type: `references/classification-guide.md`
 - For semantic judgment rules (context-aware): `references/semantic-rules/*.yaml`
+- **For decoding utilities:** `scripts/decode_utils.py` — JWT/base64/hex/entropy analysis tools for AI use
+
+**Decode Utilities for AI Agent (scripts/decode_utils.py):**
+
+When analyzing secrets, AI can use these decoding tools for deeper inspection:
+
+```python
+# Import in semantic rules or classification logic
+import sys
+sys.path.insert(0, 'scripts')
+from decode_utils import decode_jwt, calculate_entropy, analyze_secret
+
+# Analyze a potential secret comprehensively
+result = analyze_secret("eyJhbGciOiJIUzI1NiJ9...")
+# Returns: {is_jwt, is_truncated, decoded_jwt, entropy, is_base64, ...}
+
+# Check JWT structure without verification
+jwt_info = decode_jwt(token)
+# Returns: {header, payload, signature, is_truncated}
+
+# Calculate Shannon entropy (high entropy = more likely real secret)
+entropy, max_ent, normalized = calculate_entropy(secret_value)
+# normalized > 0.9 suggests high randomness (likely real secret)
+```
+
+**CLI Usage from semantic rules:**
+```bash
+# Full analysis of any string
+python3 scripts/decode_utils.py analyze "AKIAIOSFODNN7EXAMPLE"
+
+# Decode JWT
+cd scripts && python3 decode_utils.py jwt "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjMifQ.sig"
+
+# Calculate entropy
+python3 scripts/decode_utils.py entropy "random_secret_value_123"
+```
 
 **Two-Layer Rule System:**
 
@@ -496,11 +532,13 @@ For each finding, analyze:
 - Agent has file read/write capabilities
 - Agent can execute shell commands (for gitleaks)
 - Agent can reason about code context (core feature)
+- **Agent can use decode utilities** (`scripts/decode_utils.py`) for JWT/entropy/base64 analysis
 
 **Performance considerations:**
 - Batch analysis: Agent processes all findings in one pass via JSON file
 - Typical scan: 10-100 findings, analysis takes <30 seconds
 - Large repos: If >200 findings, script pre-groups by rule_id for efficiency
+- Decode analysis adds ~1-2s per finding (only used for JWT/hex/base64 secrets)
 
 ## Rules
 

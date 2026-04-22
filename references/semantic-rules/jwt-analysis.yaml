@@ -23,6 +23,7 @@ decision_tree:
     name: "decode_header"
     description: "尝试 base64 解码 header 部分，检查是否为有效 JSON"
     action: "base64_decode_first_part"
+    tool_command: "python3 scripts/decode_utils.py jwt '{match}'"
     expected: "JSON with 'alg' and 'typ' fields"
     
   - step: 3
@@ -74,6 +75,13 @@ decision_tree:
         judgment: "NEEDS_REVIEW"
         confidence: "low"
         reason: "生产代码中的 JWT 可能是真实密钥，需要进一步检查"
+
+# 解码工具配置
+decode_tools:
+  jwt_decode: "python3 scripts/decode_utils.py jwt '{token}'"
+  base64_decode: "python3 scripts/decode_utils.py b64url '{string}'"
+  entropy_check: "python3 scripts/decode_utils.py entropy '{string}'"
+  full_analysis: "python3 scripts/decode_utils.py analyze '{string}'"
 
 # 从语义规则提炼死规则（给 gitleaks）
 dead_rule_derivation:
