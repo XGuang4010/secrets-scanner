@@ -188,6 +188,84 @@ regexes = [
   '''SEGMENT_WRITE_KEY=[A-Za-z0-9]{20,}''',
 ]
 
+# Auto-generated: 2026-04-22T05:50:00Z
+# Source: batch-20260422-054720, 58 false positives from 18 repositories (~5000 stars each)
+# Pattern: JNA Windows API interface declarations (Advapi32.INSTANCE)
+
+[[rules]]
+id = "auto-filter-jna-interface-20260422"
+description = "Filter JNA Windows API interface declarations matched as generic-api-key (12 matches in batch-20260422-5000stars)"
+status = "experimental"
+created = "2026-04-22"
+validation_count = 0
+source_scans = ["batch-20260422-054720"]
+[allowlist]
+regexes = [
+  '''Advapi32\s+\w+\s*=\s*Advapi32\.INSTANCE''',
+  '''\w+\s+\w+\s*=\s*\w+\.INSTANCE;''',
+]
+
+# Auto-generated: 2026-04-22T05:50:00Z
+# Source: batch-20260422-054720, 58 false positives from 18 repositories (~5000 stars each)
+# Pattern: Hardcoded test passwords reused across Hibernate test suite
+
+[[rules]]
+id = "auto-filter-hibernate-test-password-20260422"
+description = "Filter hardcoded test password reused across Hibernate ORM test files (11 matches in batch-20260422-5000stars)"
+status = "experimental"
+created = "2026-04-22"
+validation_count = 0
+source_scans = ["batch-20260422-054720"]
+[allowlist]
+paths = [
+  '''.*hibernate-core/src/test/.*''',
+]
+regexes = [
+  '''password\s*=\s*["\']3fabb4de8f1ee2e97d7793bab2db1116["\']''',
+  '''password_enc.*76f271db3661fd50082e68d4b953fbee''',
+]
+
+# Auto-generated: 2026-04-22T05:50:00Z
+# Source: batch-20260422-054720, 58 false positives from 18 repositories (~5000 stars each)
+# Pattern: QQ group join links (idkey parameter) in README files
+
+[[rules]]
+id = "auto-filter-qq-group-link-20260422"
+description = "Filter QQ group join links with idkey parameter in README files (1 match in batch-20260422-5000stars)"
+status = "experimental"
+created = "2026-04-22"
+validation_count = 0
+source_scans = ["batch-20260422-054720"]
+[allowlist]
+paths = [
+  '''.*README.*''',
+  '''.*\.md$''',
+]
+regexes = [
+  '''idkey=[a-f0-9]{64}''',
+  '''wpa/qunwpa\?idkey=''',
+]
+
+# Auto-generated: 2026-04-22T05:50:00Z
+# Source: batch-20260422-054720, 58 false positives from 18 repositories (~5000 stars each)
+# Pattern: Cython struct definitions (.pxi files) matched as generic-api-key
+
+[[rules]]
+id = "auto-filter-cython-struct-20260422"
+description = "Filter Cython struct definitions in .pxi files matched as generic-api-key (1 match in batch-20260422-5000stars)"
+status = "experimental"
+created = "2026-04-22"
+validation_count = 0
+source_scans = ["batch-20260422-054720"]
+[allowlist]
+paths = [
+  '''.*\.pxi$''',
+]
+regexes = [
+  '''\w+:\s*\n\s*cnp\.\w+_t''',
+  '''Heapitem:\s*\n\s*cnp\.float64_t''',
+]
+
 # Auto-generated: 2026-04-22T03:55:00Z
 # Source: batch-20260422-035026, 338 false positives from 20 repositories (~100 stars each)
 # Pattern: Base64 icon data in XML resource files matched as square-access-token
