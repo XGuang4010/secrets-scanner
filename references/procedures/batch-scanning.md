@@ -203,6 +203,62 @@ New rules generated:
 **Project type:** Go CLI tools, libraries
 **Pattern:** `testdata/*`, `*_test.go`
 **Content:** Usually no secrets detected in Go testdata
+**Note:** Exception: Go testdata containing RPM package names in JSON files can trigger `generic-api-key` (see RPM Package Names pattern below)
+
+### RPM Package Names in JSON (Extreme FP Rate)
+
+**Project type:** Security scanners, vulnerability databases, container image analyzers
+**Pattern:** `testdata/**/*.json` containing CVE/VEX data
+**Content:** RPM package version strings like `rubygem-apipie-bindings-0:0.6.0-1.el8sat.src`
+**Rule:** `generic-api-key`
+**Classification:** FALSE_POSITIVE (package names, not secrets)
+**Dead rule:** Filter `.json` files in `testdata/` matching RPM version format
+**Example matches:** `rh-sso7-keycloak-0:18.0.7-1.redhat_00001.1.el9sso.src`, `eap7-snakeyaml-0:1.33.0-2.SP1_redhat_00001.1.el9eap.src`
+
+### JNA Windows API Declarations (High FP Rate)
+
+**Project type:** Java desktop apps using JNA for native Windows APIs
+**Pattern:** `*.java` files with JNA interface declarations
+**Content:** `Advapi32 advapi32 = Advapi32.INSTANCE;`
+**Rule:** `generic-api-key`
+**Classification:** FALSE_POSITIVE (API interface declaration, not a secret)
+**Dead rule:** Filter `Advapi32.INSTANCE` and similar JNA interface patterns
+
+### Hibernate Test Passwords (Medium FP Rate)
+
+**Project type:** Java ORM frameworks (Hibernate, Spring Data JPA)
+**Pattern:** `src/test/java/**/test/**/*.java`
+**Content:** Same hardcoded test password reused across multiple test classes, e.g., `password = "3fabb4de8f1ee2e97d7793bab2db1116"`
+**Rule:** `generic-api-key`
+**Classification:** FALSE_POSITIVE (test fixture data)
+**Dead rule:** Filter specific known test password values in Hibernate test paths
+
+### QQ Group Links in README (Low FP Rate)
+
+**Project type:** Chinese open-source projects
+**Pattern:** `README.md`
+**Content:** `idkey=44c2b0331f1bdca6c9d404e863edd83973fa97224b79778db79505fc592f00bc` in QQ group join URLs
+**Rule:** `generic-api-key`
+**Classification:** FALSE_POSITIVE (social media group link parameter)
+**Dead rule:** Filter `wpa/qunwpa?idkey=` URLs in markdown files
+
+### Cython Struct Definitions (Low FP Rate)
+
+**Project type:** Python libraries with Cython extensions (scikit-image, numpy, etc.)
+**Pattern:** `*.pxi` files
+**Content:** `Heapitem:\n    cnp.float64_t value` (Cython struct with typed fields)
+**Rule:** `generic-api-key`
+**Classification:** FALSE_POSITIVE (Cython type definitions)
+**Dead rule:** Filter `.pxi` files
+
+### XML Base64 Icon Data (Low FP Rate)
+
+**Project type:** Java/Android desktop apps with XML resource files
+**Pattern:** `src/main/resources/**/*.xml` containing icon data
+**Content:** Base64-encoded SVG/icon data starting with `EAA...`
+**Rule:** `square-access-token`
+**Classification:** FALSE_POSITIVE (base64 icon data)
+**Dead rule:** Filter `EAA[A-Za-z0-9+/]{40,}` in XML resource files
 
 ## Troubleshooting
 
@@ -222,6 +278,36 @@ New rules generated:
 - **Python (7 repos):** 0 findings total.
 - **Learning:** Kubernetes e2e testdata is a major source of false positives. `testdata/` directories should be filtered by default for k8s-related rules.
 - **Tooling:** `batch-scan.py` worked correctly. `decode_utils.py` was not needed for this batch (no JWT/base64 secrets found).
+
+### Scan 2026-04-22 (20 repos, ~100-150 stars)
+- **Java (7 repos):** 0 findings total.
+- **Go (7 repos):** 337 findings from 1 repo (`claircore`), all FALSE_POSITIVE.
+  - 334 matches: RPM package version strings in `testdata/**/*.json` (CVE/VEX data)
+  - 3 matches: `SEGMENT_WRITE_KEY` in testdata Dockerfiles
+- **Python (6 repos):** 1 finding from `wyldcard` - base64 icon data in XML matched as `square-access-token`. FALSE_POSITIVE.
+- **Learning:** Small-star repos can have extreme FP rates from testdata. `claircore` alone produced 334 FPs from RPM package names. The `generic-api-key` rule is overly broad for package manager metadata.
+- **Star-range insight:** 100-star repos appear to have the highest FP density due to less mature test data management.
+
+### Scan 2026-04-22 (18 repos, ~5000-6500 stars)
+- **Java (7 repos):** 12 findings from `processing` (JNA API declarations, all FP), 9 from `IJPay` (2 CONFIRMED WeChat Pay API keys + 7 FPs), 11 from `hibernate-orm` (test passwords, all FP), 4 from `jetlinks-community` (test PEM files, all FP), 3 from `Spring-Cloud-Platform` (nacos log tokens, all FP).
+- **Go (7 repos):** 25 findings from `evcc` - **20 CONFIRMED vehicle OEM API secrets** + 5 FPs (testdata JWT/keys). This is the first batch with significant confirmed leaks.
+  - Confirmed secrets: Hyundai CCSP secret, Fiat ApiKey/XApiKey, Skoda/Seat/Toyota/Nissan/Renault/Smart/Subaru/PSA/JLR/VW client secrets
+- **Python (6 repos):** 11 findings total (jwt_tool README examples, scikit-image docstring URLs).
+- **Learning:** High-star repos DO contain real hardcoded secrets. `evcc` hardcodes 12 car manufacturers' API keys in production vehicle integration code. Payment SDKs like `IJPay` also embed real API keys in demo configs.
+- **Star-range insight:** 5000+ star repos have the highest confirmed-secret rate. Popularity correlates with real integration code that needs actual API credentials.
+- **Tooling:** `decode_utils.py` was used successfully to analyze JWT structure during classification.
+
+### Star-Range Correlation Summary
+
+Based on three batch scans across star ranges:
+
+| Star Range | Repos | Total Findings | Confirmed | FP Rate | Notes |
+|------------|-------|---------------|-----------|---------|-------|
+| ~100 | 20 | 338 | 0 | 100% | Extreme FP from testdata (RPM names, test fixtures) |
+| ~500 | 19 | 30 | 0 | 100% | Moderate FP, mostly k8s testdata TLS certs |
+| ~5000 | 18 | 80 | 22 | 72.5% | Real secrets emerge (vehicle APIs, payment keys) |
+
+**Implication:** For scanner calibration and rule testing, use a mix of star ranges. Low-star repos are best for discovering FP patterns; high-star repos are best for discovering real secret patterns.
 
 ### Scan 2026-04-21 (20 repos, mixed sizes)
 - 38 raw findings, 9 confirmed, 29 false positives
