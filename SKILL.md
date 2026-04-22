@@ -435,4 +435,49 @@ For each finding, analyze:
 6. **Auto-learning is mandatory**: After every scan, if false positives exist, update rules
 7. **No human confirmation**: The entire pipeline runs autonomously
 
+## Pitfalls & Lessons Learned
+
+### GitHub Push Protection on Example Secrets
+
+When committing `.learning/` files or documentation that contain example secret patterns (e.g., `https://hooks.slack.com/services/...`), GitHub push protection will block the push even if these are clearly documented examples.
+
+**Workarounds:**
+- Sanitize learning data before commit: truncate values, replace sensitive segments with `...` or `EXAMPLE`
+- Use `EXAMPLE` or `FAKE` markers in all documentation examples: `sk_live_EXAMPLE_xxx` instead of realistic-looking values
+- Consider adding `.learning/` to `.gitignore` if push protection is persistently problematic
+
+### Context Extraction Edge Cases
+
+gitleaks scans git history, so it may report findings with line numbers from old commits that no longer exist in the current file (file deleted, renamed, or shortened). `scan.py` handles this by checking bounds before extracting context.
+
+**If you see `[Line N out of range in filename]`: this is expected for historical findings. Use the `match` field for classification instead of context.**
+
+### Field Preservation is Critical
+
+The Agent MUST preserve all original fields (`file`, `line`, `context`, `secret`, `match`, etc.) when generating `scan-classified.json`. `generate-report.py` needs these fields to produce the final report. Only ADD classification fields — never REMOVE or REPLACE original fields.
+
+**Common mistake:** Creating a minimal classified JSON with only `finding_id` and `classification`. This breaks report generation.
+
+### Type-Specific Classification Sensitivity
+
+Different secret types require different levels of context analysis:
+
+| Type | Context Needed | Why |
+|------|---------------|-----|
+| API Keys (ghp_, sk-, AKIA...) | Low | Format itself reveals authenticity |
+| Passwords | **High** | Same string can be real or fake depending on context |
+| JWT Tokens | Medium | Check if truncated (`...`) or in Postman/test files |
+| Private Keys | Low | Check if full length vs truncated example |
+
+**Passwords are the hardest.** `password=password123` in `tests/auth.py` is clearly fake, but the same string in `config/production.yml` is a real (weak) leak. Always analyze variable names, comments, and file paths for password findings.
+
+### Batch Scanning Tips
+
+When scanning multiple repositories:
+1. Run `scan.py --detect` on each repo individually (don't try to merge gitleaks runs)
+2. Aggregate findings from multiple `/tmp/scan-findings.json` files
+3. Classify all findings in one batch for efficiency
+4. Generate per-repo reports plus a master summary
+5. Extract patterns from the combined false positive pool for better rule generalization
+
 (End of file)
