@@ -126,6 +126,27 @@ paths = [
   '''.*docs/.*''',
 ]
 
+# Auto-generated: 2026-04-22T03:35:00Z
+# Source: batch-20260422-033026, 30 false positives from 19 repositories (~500 stars each)
+# Pattern: Test fixture TLS certificates and secrets in Kubernetes e2e testdata
+
+[[rules]]
+id = "auto-filter-k8s-testdata-tls-20260422"
+description = "Filter test fixture TLS certificates and kubernetes secrets in e2e testdata directories (30 matches in batch-20260422)"
+status = "experimental"
+created = "2026-04-22"
+validation_count = 0
+source_scans = ["batch-20260422-033026"]
+[allowlist]
+paths = [
+  '''.*testdata/.*''',
+  '''.*tests/data/.*''',
+]
+regexes = [
+  '''name:\s*testsecret-[a-z]+''',
+  '''tls\.(crt|key):\s*[A-Za-z0-9+/=]+''',
+]
+
 # Auto-generated: 2026-04-21T10:30:00Z
 # Source: batch-20260421, 29 false positives from 20 repositories
 # Pattern: Algolia and doc search API keys in documentation assets (1 match)
