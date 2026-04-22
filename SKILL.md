@@ -38,8 +38,13 @@ secrets-scanner/
     generate-report.py              # Generate Markdown from classified results
     rule-validator.py               # Validate regexes, manage rule lifecycle
     semantic-rule-stats.py          # Semantic rules statistics and reporting
+    batch-scan.py                   # Batch scan multiple repositories
+    decode_utils.py                 # Decode utilities for AI (JWT/entropy/base64)
+    decode-tools.sh                 # Bash wrapper for quick decode operations
   references/
     classification-guide.md         # Detailed classification logic by secret type
+    procedures/
+      batch-scanning.md             # Full batch scanning workflow and patterns
     semantic-rules/                 # AI semantic rules (context-aware judgment)
       jwt-analysis.yaml
       password-analysis.yaml
@@ -588,11 +593,24 @@ Different secret types require different levels of context analysis:
 
 ### Batch Scanning Tips
 
-When scanning multiple repositories:
+When scanning multiple repositories, follow the full procedure in `references/procedures/batch-scanning.md`.
+
+Quick workflow:
 1. Run `scan.py --detect` on each repo individually (don't try to merge gitleaks runs)
-2. Aggregate findings from multiple `/tmp/scan-findings.json` files
+2. Aggregate findings from multiple `/tmp/scan-findings.json` files using `scripts/batch-scan.py`
 3. Classify all findings in one batch for efficiency
 4. Generate per-repo reports plus a master summary
 5. Extract patterns from the combined false positive pool for better rule generalization
+
+**Key differences from single-repo scans:**
+- Use `batch-scan.py` to orchestrate multiple `scan.py` runs
+- Each finding includes `repo_name` and `repo_path` for attribution
+- Cross-repo pattern extraction yields more generalizable rules
+- Background terminal mode recommended for batch cloning (execute_code 300s limit)
+
+**Known high-FP patterns from past batch scans:**
+- Kubernetes e2e testdata (`testdata/**/*.yaml`): test TLS certs, `testsecret-*` secrets
+- Java test resources: `src/test/resources/*.properties` with dummy credentials
+- See `references/procedures/batch-scanning.md` for full catalog
 
 (End of file)
