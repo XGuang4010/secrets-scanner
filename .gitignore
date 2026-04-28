@@ -1,5 +1,5 @@
 # Gitleaks precompiled binaries
-tools/gitleaks-*
+tools/gitleaks*
 
 # Verification cache
 tools/.verified.json
