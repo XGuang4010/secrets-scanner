@@ -15,12 +15,13 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 SKILL_DIR = SCRIPT_DIR.parent
-TMP_DIR = Path("/tmp")
+TMP_DIR = Path(tempfile.gettempdir())
 
 def run_scan(repo_path):
     """Run scan.py --detect on a single repo and return findings data."""
@@ -82,18 +83,20 @@ def main():
     parser = argparse.ArgumentParser(description="Batch scan multiple repositories")
     parser.add_argument("repos", nargs="*", help="Repository paths to scan")
     parser.add_argument("--list-file", help="JSON file with repo list (from search)")
+    parser.add_argument("--base-dir", default=str(Path.cwd()), help="Base directory for repo list resolution")
     parser.add_argument("--output", default="/tmp/batch-scan-findings.json", help="Output file path")
-    
+
     args = parser.parse_args()
-    
+
     # Collect repo paths
     repo_paths = []
-    
+    base_dir = Path(args.base_dir)
+
     if args.list_file:
         with open(args.list_file, "r") as f:
             repo_list = json.load(f)
         for r in repo_list:
-            path = Path("/home/davei/projects") / r["name"]
+            path = base_dir / r["name"]
             if path.exists():
                 repo_paths.append(path)
             else:

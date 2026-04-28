@@ -27,81 +27,49 @@ ORPHAN_THRESHOLD = 10
 
 
 def parse_toml_rules(path):
-    """Parse auto-filter-rules.toml and extract rule blocks."""
+    """Parse auto-filter-rules.toml using standard tomllib."""
     if not path.exists():
         return []
-    
-    content = path.read_text(encoding="utf-8")
+
+    try:
+        import tomllib
+    except ModuleNotFoundError:
+        import tomli as tomllib
+
+    with open(path, "rb") as f:
+        data = tomllib.load(f)
+
     rules = []
-    current_rule = None
-    current_block = []
-    
-    for line in content.splitlines():
-        if line.strip().startswith("[[rules]]"):
-            if current_rule is not None:
-                current_rule["_raw"] = "\n".join(current_block)
-                rules.append(current_rule)
-            current_rule = {"_raw_lines": []}
-            current_block = [line]
-        elif current_rule is not None:
-            current_block.append(line)
-            # Parse key-value pairs
-            if "=" in line and not line.strip().startswith("["):
-                key, _, val = line.partition("=")
-                key = key.strip()
-                val = val.strip().strip('"').strip("'")
-                if key in ("id", "description", "status", "created", "validated_at"):
-                    current_rule[key] = val
-                elif key == "validation_count":
-                    try:
-                        current_rule[key] = int(val)
-                    except ValueError:
-                        current_rule[key] = 0
-                elif key == "source_scans":
-                    # Parse array format ["001", "002"]
-                    val = val.strip("[]")
-                    if val:
-                        current_rule[key] = [v.strip().strip('"').strip("'") for v in val.split(",")]
-                    else:
-                        current_rule[key] = []
-    
-    if current_rule is not None:
-        current_rule["_raw"] = "\n".join(current_block)
-        rules.append(current_rule)
-    
+    for rule in data.get("rules", []):
+        parsed = {
+            "id": rule.get("id", ""),
+            "description": rule.get("description", ""),
+            "status": rule.get("status", "experimental"),
+            "created": rule.get("created", ""),
+            "validated_at": rule.get("validated_at", ""),
+            "validation_count": rule.get("validation_count", 0),
+            "source_scans": rule.get("source_scans", []),
+            "allowlist": rule.get("allowlist", {}),
+        }
+        rules.append(parsed)
+
     return rules
 
 
 def validate_regexes(rules):
     """Validate that all regexes in allowlist rules compile correctly."""
     errors = []
-    
+
     for rule in rules:
         rule_id = rule.get("id", "unknown")
-        # Extract regexes from raw block
-        raw = rule.get("_raw", "")
-        
-        # Find all regexes in allowlist section
-        in_allowlist = False
-        for line in raw.splitlines():
-            if "[allowlist]" in line:
-                in_allowlist = True
-            elif line.strip().startswith("[") and "allowlist" not in line:
-                in_allowlist = False
-            
-            if in_allowlist and "regexes" in line and "=" in line:
-                # Extract regex values from the line
-                val_part = line.split("=", 1)[1].strip()
-                # Handle multi-line arrays
-                if val_part.startswith("["):
-                    # Single line array
-                    regexes = extract_regexes_from_array(val_part)
-                    for regex in regexes:
-                        try:
-                            re.compile(regex)
-                        except re.error as e:
-                            errors.append(f"  {rule_id}: Invalid regex '{regex[:50]}...' - {e}")
-    
+        allowlist = rule.get("allowlist", {})
+        regexes = allowlist.get("regexes", [])
+        for regex in regexes:
+            try:
+                re.compile(regex)
+            except re.error as e:
+                errors.append(f"  {rule_id}: Invalid regex '{regex[:50]}...' - {e}")
+
     return errors
 
 
@@ -128,10 +96,14 @@ def check_rule_effectiveness(rules):
     
     # Load all learning data
     all_false_positives = []
-    for f in learning_files:
+    for learning_file in learning_files:
         try:
-            with open(f, "r", encoding="utf-8") as fp:
-                data = json.load(fp)
+            with open(learning_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            # Handle both old format (list) and new format (dict with false_positives key)
+            if isinstance(data, list):
+                all_false_positives.extend(data)
+            elif isinstance(data, dict):
                 all_false_positives.extend(data.get("false_positives", []))
         except (json.JSONDecodeError, IOError):
             continue
@@ -145,8 +117,7 @@ def check_rule_effectiveness(rules):
         rule_id = rule.get("id", "")
         # Check if any recent false positive would have been caught by this rule
         # This is approximate - we check if the rule's patterns match recent false positives
-        raw = rule.get("_raw", "")
-        regexes = extract_all_regexes(raw)
+        regexes = extract_all_regexes(rule)
         
         match_count = 0
         for fp in all_false_positives:
@@ -165,28 +136,10 @@ def check_rule_effectiveness(rules):
     return effectiveness
 
 
-def extract_all_regexes(raw_text):
-    """Extract all regex patterns from a rule block."""
-    regexes = []
-    in_allowlist = False
-    
-    for line in raw_text.splitlines():
-        if "[allowlist]" in line:
-            in_allowlist = True
-        elif line.strip().startswith("[") and "allowlist" not in line:
-            in_allowlist = False
-        
-        if in_allowlist and ("regexes" in line or "regexTarget" in line):
-            # Try to extract regex from the line
-            val_part = line.split("=", 1)[1].strip() if "=" in line else ""
-            if val_part.startswith("["):
-                regexes.extend(extract_regexes_from_array(val_part))
-            elif "'''" in val_part:
-                parts = val_part.split("'''")
-                if len(parts) >= 3:
-                    regexes.append(parts[1])
-    
-    return regexes
+def extract_all_regexes(rule):
+    """Extract all regex patterns from a rule dict."""
+    allowlist = rule.get("allowlist", {})
+    return allowlist.get("regexes", [])
 
 
 def promote_rules(rules, effectiveness):
@@ -246,35 +199,42 @@ def rewrite_rules_file(rules):
         f'last_updated = "{datetime.now(timezone.utc).isoformat()}"',
         "",
     ]
-    
+
     for rule in rules:
         lines.append("[[rules]]")
         lines.append(f'id = "{rule.get("id", "")}"')
         lines.append(f'description = "{rule.get("description", "")}"')
         lines.append(f'status = "{rule.get("status", "experimental")}"')
         lines.append(f'created = "{rule.get("created", "")}"')
-        
+
         if rule.get("validated_at"):
             lines.append(f'validated_at = "{rule.get("validated_at")}"')
-        
+
         lines.append(f'validation_count = {rule.get("validation_count", 0)}')
-        
+
         source_scans = rule.get("source_scans", [])
         if source_scans:
             scans_str = ", ".join(f'"{s}"' for s in source_scans)
             lines.append(f'source_scans = [{scans_str}]')
-        
-        # Copy allowlist section from raw
-        raw = rule.get("_raw", "")
-        in_allowlist = False
-        for line in raw.splitlines():
-            if "[allowlist]" in line:
-                in_allowlist = True
-            if in_allowlist:
-                lines.append(line)
-        
+
+        allowlist = rule.get("allowlist", {})
+        if allowlist:
+            lines.append("[rules.allowlist]")
+            paths = allowlist.get("paths", [])
+            if paths:
+                lines.append("paths = [")
+                for p in paths:
+                    lines.append(f"  '''{p}''',")
+                lines.append("]")
+            regexes = allowlist.get("regexes", [])
+            if regexes:
+                lines.append("regexes = [")
+                for rx in regexes:
+                    lines.append(f"  '''{rx}''',")
+                lines.append("]")
+
         lines.append("")
-    
+
     AUTO_FILTER_PATH.write_text("\n".join(lines), encoding="utf-8")
     print(f"[OK] Updated {AUTO_FILTER_PATH}")
 

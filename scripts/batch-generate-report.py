@@ -15,168 +15,22 @@ Output:
 """
 
 import json
-import re
 import sys
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
-
-# ---------------------------------------------------------------------------
-# 风险等级映射
-# ---------------------------------------------------------------------------
-HIGH_KEYWORDS = [
-    "aws-access-key", "gcp-api-key", "azure", "github", "gitlab",
-    "slack", "stripe", "openai", "private-key", "jwt", "rsa-private-key",
-    "ssh-private-key", "api-key", "secret-key", "access-token"
-]
-MEDIUM_KEYWORDS = ["generic", "password", "secret", "token", "api-key"]
-
-SEVERITY_EMOJI = {
-    "HIGH": ("🔴", "高"),
-    "MEDIUM": ("🟡", "中"),
-    "LOW": ("🟢", "低"),
-    "UNKNOWN": ("⚪", "未知"),
-}
-
-
-# ---------------------------------------------------------------------------
-# 脱敏函数
-# ---------------------------------------------------------------------------
-def mask_secret(value: str) -> str:
-    """脱敏：显示前4位 + **** + 后4位"""
-    if not value:
-        return "****"
-    if len(value) > 8:
-        return value[:4] + "****" + value[-4:]
-    return "****"
-
-
-def mask_match_line(match: str) -> str:
-    """在匹配行中脱敏敏感值"""
-    # 匹配 = 或 : 后的值（可能有引号）
-    patterns = [
-        r'([=:])\s*(["\']?)([^"\';,\s]+)',  # key = value
-        r'(["\'])([^"\']{8,})(["\'])',  # "long_secret"
-    ]
-    for pattern in patterns:
-        m = re.search(pattern, match)
-        if m:
-            # 根据匹配组数确定位置
-            if len(m.groups()) == 3:
-                if m.group(2) in ['"', "'"]:
-                    # key = "value" 格式
-                    start = m.start(2)
-                    end = m.end(2)
-                else:
-                    # key = value 格式
-                    start = m.start(3)
-                    end = m.end(3)
-                val = match[start:end]
-                if len(val) > 4:
-                    masked = mask_secret(val)
-                    return match[:start] + masked + match[end:]
-    return match
-
-
-# ---------------------------------------------------------------------------
-# 风险分析
-# ---------------------------------------------------------------------------
-def get_hazard(rule_id: str, file: str, match: str, context: dict) -> str:
-    """根据规则类型和上下文返回风险描述"""
-    rule_lower = rule_id.lower()
-    file_lower = file.lower()
-    
-    # AWS 密钥
-    if "aws" in rule_lower:
-        return "AWS 访问密钥泄露。攻击者可访问云资源、创建/删除实例、读取存储桶数据，导致数据泄露和费用损失。"
-    
-    # 私钥
-    if "private-key" in rule_lower or "privatekey" in rule_lower:
-        return "私钥文件泄露。攻击者可解密通信流量、伪造身份签名、入侵服务器，造成严重的安全事件。"
-    
-    # GitHub Token
-    if "github" in rule_lower:
-        return "GitHub 个人访问令牌泄露。攻击者可访问代码仓库、修改代码、删除仓库、访问私有资源。"
-    
-    # API Key
-    if "api-key" in rule_lower or "apikey" in rule_lower:
-        if "stripe" in rule_lower or "stripe" in file_lower:
-            return "Stripe API 密钥泄露。攻击者可发起支付、退款、查看交易记录。"
-        if "vehicle" in file_lower or "car" in file_lower:
-            return "车辆 OEM API 密钥泄露。攻击者可注册虚拟设备并获取车辆远程控制权限。"
-        return "API 密钥泄露。攻击者可调用相关接口，获取未授权的数据或执行敏感操作。"
-    
-    # JWT
-    if "jwt" in rule_lower:
-        return "JWT 密钥泄露。攻击者可伪造身份令牌、越权访问系统、冒充其他用户。"
-    
-    # 通用密码
-    if "password" in rule_lower:
-        return "硬编码密码发现。攻击者可使用该密码登录系统，获取未授权访问。"
-    
-    # 通用密钥
-    return f"{rule_id} 类型的敏感信息泄露。攻击者可能利用该凭证访问相关服务或资源，建议立即轮换。"
-
-
-def get_severity(rule_id: str, description: str, file: str, match: str) -> str:
-    """根据规则类型确定风险等级"""
-    rid = rule_id.lower()
-    desc = description.lower() if description else ""
-    combined = f"{rid} {desc} {file.lower()}"
-    
-    # 高风险
-    for kw in HIGH_KEYWORDS:
-        if kw in rid or kw in desc:
-            # 测试文件降低风险
-            if any(ind in file.lower() for ind in ["test", "spec", "mock", "example", "demo"]):
-                return "MEDIUM"
-            return "HIGH"
-    
-    # 中风险
-    for kw in MEDIUM_KEYWORDS:
-        if kw in rid or kw in desc:
-            return "MEDIUM"
-    
-    return "LOW"
-
-
-def is_test_context(file: str, context: dict) -> bool:
-    """判断是否测试/示例代码上下文"""
-    test_indicators = ["test", "spec", "mock", "example", "demo", "fixture", "sample"]
-    lowered = file.lower()
-    if any(ind in lowered for ind in test_indicators):
-        return True
-    
-    for line in context.get("before", []) + context.get("after", []):
-        lowered_line = line.lower()
-        if any(ind in lowered_line for ind in test_indicators):
-            return True
-    return False
-
-
-# ---------------------------------------------------------------------------
-# 报告格式化
-# ---------------------------------------------------------------------------
-def format_context(context: dict) -> str:
-    """格式化代码上下文用于 Markdown 显示"""
-    lines = []
-    
-    # 前序行
-    for i, line in enumerate(context.get("before", []), 1):
-        lines.append(f"     {line}")
-    
-    # 匹配行
-    match_line = context.get("match_line", "")
-    if match_line:
-        lines.append(f"  >>> {match_line}")
-    
-    # 后续行
-    for i, line in enumerate(context.get("after", []), 1):
-        lines.append(f"     {line}")
-    
-    return "\n".join(lines)
+from report_common import (
+    SEVERITY_EMOJI,
+    build_recommendations_lines,
+    derive_owner_repo,
+    format_context,
+    get_hazard,
+    get_severity,
+    mask_match_line,
+    mask_secret,
+)
 
 
 def format_finding(finding: dict, show_classification: bool = True) -> List[str]:
@@ -234,18 +88,6 @@ def format_finding(finding: dict, show_classification: bool = True) -> List[str]
     return lines
 
 
-def derive_owner_repo(repo_path: str) -> tuple:
-    """从路径提取 owner/repo"""
-    if not repo_path or repo_path == "unknown":
-        return "unknown", "unknown"
-    parts = [p for p in repo_path.replace("\\", "/").split("/") if p]
-    if len(parts) >= 2:
-        return parts[-2], parts[-1]
-    if len(parts) == 1:
-        return "unknown", parts[0]
-    return "unknown", "unknown"
-
-
 # ---------------------------------------------------------------------------
 # 报告生成
 # ---------------------------------------------------------------------------
@@ -283,10 +125,10 @@ def build_summary(
     
     # 风险等级统计
     high_count = sum(1 for f in findings if get_severity(
-        f.get("rule_id", ""), f.get("description", ""), f.get("file", ""), f.get("match", "")
+        f.get("rule_id", ""), f.get("description", ""), f.get("file", ""), f.get("context", {}), f.get("match", "")
     ) == "HIGH")
     medium_count = sum(1 for f in findings if get_severity(
-        f.get("rule_id", ""), f.get("description", ""), f.get("file", ""), f.get("match", "")
+        f.get("rule_id", ""), f.get("description", ""), f.get("file", ""), f.get("context", {}), f.get("match", "")
     ) == "MEDIUM")
     
     lines.append(f"| 🔴 高风险 | {high_count} |")
@@ -296,41 +138,10 @@ def build_summary(
     return lines
 
 
-def build_recommendations(has_confirmed: bool) -> List[str]:
-    """构建修复建议"""
-    lines = []
-    lines.append("## 🔧 修复建议")
-    lines.append("")
-    
-    if has_confirmed:
-        lines.append("### ⚠️ 立即行动")
-        lines.append("")
-        lines.append("1. **立即轮换泄露的凭证**")
-        lines.append("   - 通过服务商控制台作废已泄露的密钥/令牌")
-        lines.append("   - 生成新的凭证并更新应用程序配置")
-        lines.append("   - 检查是否有异常访问日志")
-        lines.append("")
-        lines.append("2. **审计访问日志**")
-        lines.append("   - 检查泄露的凭证是否被未授权方使用")
-        lines.append("   - 查找可疑活动并评估影响范围")
-        lines.append("")
-    
-    lines.append("### 🛡️ 预防措施")
-    lines.append("")
-    lines.append("1. **使用环境变量** 存储所有密钥，禁止硬编码")
-    lines.append("2. **将 `.env` 文件加入 `.gitignore`** 后再提交代码")
-    lines.append("3. **使用 pre-commit 钩子**（如 gitleaks、detect-secrets）进行秘密扫描")
-    lines.append("4. **定期轮换密钥** 并限制密钥权限范围")
-    lines.append("5. **审查历史提交** 中是否曾泄露过敏感信息")
-    lines.append("")
-    
-    return lines
-
-
 def generate_batch_report(data: dict, output_dir: Optional[Path] = None) -> Path:
     """生成批量扫描中文报告"""
     if output_dir is None:
-        output_dir = Path("/tmp")
+        output_dir = Path.cwd()
     else:
         output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -412,6 +223,7 @@ def generate_batch_report(data: dict, output_dir: Optional[Path] = None) -> Path
                             f.get("rule_id", ""),
                             f.get("description", ""),
                             f.get("file", ""),
+                            f.get("context", {}),
                             f.get("match", "")
                         )
                         lines.extend(format_finding(f, show_classification=True))
@@ -447,7 +259,7 @@ def generate_batch_report(data: dict, output_dir: Optional[Path] = None) -> Path
                     lines.append("")
     
     # 修复建议
-    lines.extend(build_recommendations(bool(confirmed)))
+    lines.extend(build_recommendations_lines(bool(confirmed)))
     
     # 脚注
     if false_positives:

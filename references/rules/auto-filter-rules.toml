@@ -1,307 +1,57 @@
 title = "AI-Generated Filter Rules"
-last_updated = "2026-04-22T01:45:08.544359+00:00"
+last_updated = "2026-04-28T08:00:58.183726+00:00"
 
 [[rules]]
-id = "auto-filter-test-prefix-20260421"
-description = "Filter values with 'test_' prefix commonly used in test credentials"
+id = "auto-filter-craft-fixture-tokens-20260428"
+description = "Filter session fixture tokens in Craft CMS test data file (6 matches in craftcms scan)"
 status = "experimental"
-created = "2026-04-21"
+created = "2026-04-28"
 validation_count = 0
-source_scans = ["20260421-084500"]
-[allowlist]
-regexes = [
-  '''["\']?test_[a-zA-Z0-9_]+["\']?''',
-]
-
-[[rules]]
-id = "auto-filter-mock-variable-20260421"
-description = "Filter secrets assigned to mock_ variables in test contexts"
-status = "experimental"
-created = "2026-04-21"
-validation_count = 0
-source_scans = ["20260421-084500"]
-[allowlist]
-regexes = [
-  '''mock_[a-zA-Z0-9_]+\s*=\s*["\'][^"\']+["\']''',
-]
-
-# Auto-generated: 2026-04-21T09:20:00Z
-# Source: scan-20260421-091632, 5 false positives analyzed
-# Pattern: YOUR_* placeholder values in documentation curl examples
-
-[[rules]]
-id = "auto-filter-your-placeholder-20260421"
-description = "Filter YOUR_* placeholder values commonly used in documentation examples (5 matches in scan-002)"
-status = "experimental"
-created = "2026-04-21"
-validation_count = 0
-source_scans = ["002"]
-[allowlist]
-regexes = [
-  '''YOUR_[A-Z_]+''',
-  '''YOUR_[A-Z_]+_HERE''',
-]
-
-# Auto-generated: 2026-04-21T10:30:00Z
-# Source: batch-20260421, 29 false positives from 20 repositories
-# Pattern: JWT tokens in Postman collection files (7 matches)
-
-[[rules]]
-id = "auto-filter-jwt-postman-20260421"
-description = "Filter JWT tokens in Postman collection JSON files (7 matches in batch-scan)"
-status = "experimental"
-created = "2026-04-21"
-validation_count = 0
-source_scans = ["batch-20260421"]
-[allowlist]
+source_scans = ["20260428-054959"]
+[rules.allowlist]
 paths = [
-  '''.*postman.*\.json''',
-  '''.*\.postman_collection\.json''',
+  '''tests/fixtures/data/sessions\.php''',
 ]
-
-# Auto-generated: 2026-04-21T10:30:00Z
-# Source: batch-20260421, 29 false positives from 20 repositories
-# Pattern: Documentation examples with truncated/placeholder values (16 matches)
 
 [[rules]]
-id = "auto-filter-doc-examples-20260421"
-description = "Filter truncated tokens and example values in documentation files (16 matches in batch-scan)"
+id = "auto-filter-test-cookie-validation-key-20260428"
+description = "Filter fake cookieValidationKey values in PHP unit test setup (1 match in craftcms scan)"
 status = "experimental"
-created = "2026-04-21"
+created = "2026-04-28"
 validation_count = 0
-source_scans = ["batch-20260421"]
-[allowlist]
-regexes = [
-  '''eyJ[A-Za-z0-9_-]*\.\.\.''',
-  '''a1b2c3d4e5f6[a-z0-9\.]*''',
-  '''c5p4t0-[a-z0-9]+''',
-  '''dGhlIHNhbXBsZSBub25jZQ==''',
-]
+source_scans = ["20260428-054959"]
+[rules.allowlist]
 paths = [
-  '''.*docs/.*''',
-  '''.*\.md$''',
-  '''.*README.*''',
-  '''.*README.*''',
-]
-
-# Auto-generated: 2026-04-21T10:30:00Z
-# Source: batch-20260421, 29 false positives from 20 repositories
-# Pattern: Test certificates and development keys (6 matches)
-
-[[rules]]
-id = "auto-filter-test-certs-20260421"
-description = "Filter test certificates and private keys in test directories (6 matches in batch-scan)"
-status = "experimental"
-created = "2026-04-21"
-validation_count = 0
-source_scans = ["batch-20260421"]
-[allowlist]
-paths = [
-  '''.*test.*\.key''',
-  '''.*testdata.*''',
-  '''.*caddytest.*''',
-  '''.*_test\.go''',
-  '''.*test.*\.pem''',
-]
-
-# Auto-generated: 2026-04-21T10:30:00Z
-# Source: batch-20260421, 29 false positives from 20 repositories
-# Pattern: Recaptcha example keys and OIDC client IDs in READMEs (2 matches)
-
-[[rules]]
-id = "auto-filter-example-keys-20260421"
-description = "Filter example service keys and client IDs in documentation (2 matches in batch-scan)"
-status = "experimental"
-created = "2026-04-21"
-validation_count = 0
-source_scans = ["batch-20260421"]
-[allowlist]
-regexes = [
-  '''6LeYIbsSAAAAAJezaIq3Ft_hSTo0YtyeFG-.*''',
-  '''clientID.*=.*\"[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}\"''',
-]
-paths = [
-  '''.*README.*''',
-  '''.*examples/.*''',
-  '''.*docs/.*''',
-]
-
-# Auto-generated: 2026-04-22T03:35:00Z
-# Source: batch-20260422-033026, 30 false positives from 19 repositories (~500 stars each)
-# Pattern: Test fixture TLS certificates and secrets in Kubernetes e2e testdata
-
-[[rules]]
-id = "auto-filter-k8s-testdata-tls-20260422"
-description = "Filter test fixture TLS certificates and kubernetes secrets in e2e testdata directories (30 matches in batch-20260422)"
-status = "experimental"
-created = "2026-04-22"
-validation_count = 0
-source_scans = ["batch-20260422-033026"]
-[allowlist]
-paths = [
-  '''.*testdata/.*''',
-  '''.*tests/data/.*''',
+  '''tests/unit/web/RequestTest\.php''',
 ]
 regexes = [
-  '''name:\s*testsecret-[a-z]+''',
-  '''tls\.(crt|key):\s*[A-Za-z0-9+/=]+''',
+  '''cookieValidationKey' => 'lashdao8u09ud09u09231uoij098wqe''',
 ]
 
-# Auto-generated: 2026-04-22T03:55:00Z
-# Source: batch-20260422-035026, 338 false positives from 20 repositories (~100 stars each)
-# Pattern: RPM package names in testdata JSON/CVE files matched as generic-api-key
-
 [[rules]]
-id = "auto-filter-rpm-package-names-20260422"
-description = "Filter RPM package version strings in testdata matched by generic-api-key (334 matches in batch-20260422-100stars)"
+id = "auto-filter-env-example-security-key-20260428"
+description = "Filter example SECURITY_KEY and CRAFT_SECURITY_KEY values in .env.example files (3 matches in craftcms scan)"
 status = "experimental"
-created = "2026-04-22"
+created = "2026-04-28"
 validation_count = 0
-source_scans = ["batch-20260422-035026"]
-[allowlist]
+source_scans = ["20260428-054959"]
+[rules.allowlist]
 paths = [
-  '''.*testdata/.*''',
-  '''.*\.json$''',
+  '''.*\.env\.example.*''',
 ]
 regexes = [
-  '''[a-z0-9-]+-\d+:\d+\.\d+\.\d+-\d+\.[a-z_]+\.\d+\.el\d+[a-z]+\.src''',
-  '''[a-z0-9-]+-\d+:\d+\.\d+\.\d+-\d+\.SP\d+_[a-z]+_\d+\.\d+\.el\d+[a-z]+\.src''',
+  '''SECURITY_KEY=UPzGqJJMCTM4n07jkqaFNaVoof6j_Xfo''',
+  '''CRAFT_SECURITY_KEY=qwerty1234567890''',
 ]
 
-# Auto-generated: 2026-04-22T03:55:00Z
-# Source: batch-20260422-035026, 338 false positives from 20 repositories (~100 stars each)
-# Pattern: SEGMENT_WRITE_KEY test fixture in Dockerfiles
-
 [[rules]]
-id = "auto-filter-segment-testkey-20260422"
-description = "Filter SEGMENT_WRITE_KEY in testdata Dockerfiles (3 matches in batch-20260422-100stars)"
+id = "auto-filter-test-template-suggestions-20260428"
+description = "Filter sample autosuggest values in test Twig templates (1 match in craftcms scan)"
 status = "experimental"
-created = "2026-04-22"
+created = "2026-04-28"
 validation_count = 0
-source_scans = ["batch-20260422-035026"]
-[allowlist]
+source_scans = ["20260428-054959"]
+[rules.allowlist]
 paths = [
-  '''.*testdata/.*Dockerfile.*''',
-  '''.*testdata/.*''',
-]
-regexes = [
-  '''SEGMENT_WRITE_KEY=[A-Za-z0-9]{20,}''',
-]
-
-# Auto-generated: 2026-04-22T05:50:00Z
-# Source: batch-20260422-054720, 58 false positives from 18 repositories (~5000 stars each)
-# Pattern: JNA Windows API interface declarations (Advapi32.INSTANCE)
-
-[[rules]]
-id = "auto-filter-jna-interface-20260422"
-description = "Filter JNA Windows API interface declarations matched as generic-api-key (12 matches in batch-20260422-5000stars)"
-status = "experimental"
-created = "2026-04-22"
-validation_count = 0
-source_scans = ["batch-20260422-054720"]
-[allowlist]
-regexes = [
-  '''Advapi32\s+\w+\s*=\s*Advapi32\.INSTANCE''',
-  '''\w+\s+\w+\s*=\s*\w+\.INSTANCE;''',
-]
-
-# Auto-generated: 2026-04-22T05:50:00Z
-# Source: batch-20260422-054720, 58 false positives from 18 repositories (~5000 stars each)
-# Pattern: Hardcoded test passwords reused across Hibernate test suite
-
-[[rules]]
-id = "auto-filter-hibernate-test-password-20260422"
-description = "Filter hardcoded test password reused across Hibernate ORM test files (11 matches in batch-20260422-5000stars)"
-status = "experimental"
-created = "2026-04-22"
-validation_count = 0
-source_scans = ["batch-20260422-054720"]
-[allowlist]
-paths = [
-  '''.*hibernate-core/src/test/.*''',
-]
-regexes = [
-  '''password\s*=\s*["\']3fabb4de8f1ee2e97d7793bab2db1116["\']''',
-  '''password_enc.*76f271db3661fd50082e68d4b953fbee''',
-]
-
-# Auto-generated: 2026-04-22T05:50:00Z
-# Source: batch-20260422-054720, 58 false positives from 18 repositories (~5000 stars each)
-# Pattern: QQ group join links (idkey parameter) in README files
-
-[[rules]]
-id = "auto-filter-qq-group-link-20260422"
-description = "Filter QQ group join links with idkey parameter in README files (1 match in batch-20260422-5000stars)"
-status = "experimental"
-created = "2026-04-22"
-validation_count = 0
-source_scans = ["batch-20260422-054720"]
-[allowlist]
-paths = [
-  '''.*README.*''',
-  '''.*\.md$''',
-]
-regexes = [
-  '''idkey=[a-f0-9]{64}''',
-  '''wpa/qunwpa\?idkey=''',
-]
-
-# Auto-generated: 2026-04-22T05:50:00Z
-# Source: batch-20260422-054720, 58 false positives from 18 repositories (~5000 stars each)
-# Pattern: Cython struct definitions (.pxi files) matched as generic-api-key
-
-[[rules]]
-id = "auto-filter-cython-struct-20260422"
-description = "Filter Cython struct definitions in .pxi files matched as generic-api-key (1 match in batch-20260422-5000stars)"
-status = "experimental"
-created = "2026-04-22"
-validation_count = 0
-source_scans = ["batch-20260422-054720"]
-[allowlist]
-paths = [
-  '''.*\.pxi$''',
-]
-regexes = [
-  '''\w+:\s*\n\s*cnp\.\w+_t''',
-  '''Heapitem:\s*\n\s*cnp\.float64_t''',
-]
-
-# Auto-generated: 2026-04-22T03:55:00Z
-# Source: batch-20260422-035026, 338 false positives from 20 repositories (~100 stars each)
-# Pattern: Base64 icon data in XML resource files matched as square-access-token
-
-[[rules]]
-id = "auto-filter-xml-base64-icon-20260422"
-description = "Filter base64-encoded icon data in XML resource files matched as square-access-token (1 match in batch-20260422-100stars)"
-status = "experimental"
-created = "2026-04-22"
-validation_count = 0
-source_scans = ["batch-20260422-035026"]
-[allowlist]
-paths = [
-  '''.*\.xml$''',
-  '''.*resources/.*\.xml$''',
-]
-regexes = [
-  '''EAA[A-Za-z0-9+/]{40,}''',
-]
-
-# Auto-generated: 2026-04-21T10:30:00Z
-# Source: batch-20260421, 29 false positives from 20 repositories
-# Pattern: Algolia and doc search API keys in documentation assets (1 match)
-
-[[rules]]
-id = "auto-filter-docsearch-apikey-20260421"
-description = "Filter documentation search API keys in docs assets (1 match in batch-scan)"
-status = "experimental"
-created = "2026-04-21"
-validation_count = 0
-source_scans = ["batch-20260421"]
-[allowlist]
-regexes = [
-  '''api_key:\s*[\"\'][a-f0-9]{32}[\"\']''',
-]
-paths = [
-  '''.*docs/assets/.*''',
-  '''.*docs/.*\.js$''',
+  '''.*templates/tests/.*\.twig''',
 ]
