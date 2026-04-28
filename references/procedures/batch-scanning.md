@@ -270,11 +270,21 @@ New rules generated:
 **Classification:** FALSE_POSITIVE (base64 icon data)
 **Dead rule:** Filter `EAA[A-Za-z0-9+/]{40,}` in XML resource files
 
+### Minified JavaScript Bundles (High FP Rate)
+
+**Project type:** Any web project with bundled frontend assets
+**Pattern:** `*.js` files, especially `vendor.[hash].js` or library bundles (xterm.js, etc.)
+**Content:** Minified variable assignment chains like `t.FourKeyMap=t.TwoKeyMap=void ` or `t.getColumnByKey=t.getColumnById=t.orderBy=t.getCell=void `
+**Rule:** `generic-api-key`
+**Classification:** FALSE_POSITIVE (minified JS variable names, not real API keys)
+**Dead rule:** Filter `t\.[A-Za-z]+=t\.[A-Za-z]+(?:=t\.[A-Za-z]+)?=void` in `.js` files
+**Note:** This pattern is extremely common at 10k+ star repos that ship web UIs. A single minified bundle can trigger 4+ identical FPs.
+
 ## Troubleshooting
 
 | Problem | Cause | Solution |
 |---------|-------|----------|
-| Clone times out | Repo too large or network slow | Use `--depth=1` shallow clone; run in background |
+| Clone times out | Repo too large or network slow; `execute_code` has 300s limit | Use `--depth=1` shallow clone; **use `terminal(background=True)`** for large repos (e.g., logstash >120s); run clone script in background with `notify_on_complete` |
 | TLS handshake failed | GitHub rate limiting or network | Retry with `sleep 2` between clones |
 | scan.py no output | gitleaks found nothing or crashed | Check `/tmp/gitleaks-raw.json` manually |
 | Empty batch findings file | All repos had 0 findings | Normal for clean repos; document the result |
@@ -326,6 +336,7 @@ Based on four batch scans across star ranges:
 | ~500 | 19 | 30 | 0 | 100% | Moderate FP, mostly k8s testdata TLS certs |
 | ~5000 (Apr 22 early) | 18 | 80 | 22 | 72.5% | Real secrets emerge (vehicle APIs, payment keys) |
 | ~5000 (Apr 22 plugin) | 20 | 309 | TBD* | TBD* | Unclassified; requires AI review for confirmation count |
+| ~15000 (Apr 27) | 10 | 23 | 5 | 78.3% | Minified JS bundles dominate FPs; real secrets still present (exploit keys, service APIs) |
 
 *309 raw findings from the plugin-era scan are pending AI classification. Pre-truncation report was 25MB; post-optimization report is 96KB.
 
@@ -334,3 +345,15 @@ Based on four batch scans across star ranges:
 ### Scan 2026-04-21 (20 repos, mixed sizes)
 - 38 raw findings, 9 confirmed, 29 false positives
 - Generated 5 experimental dead rules covering: YOUR_* placeholders, JWT in Postman, doc examples, test certs, example keys, DocSearch API keys
+
+### Scan 2026-04-27 (10 repos, ~14000-15000 stars, Java + Python)
+- **Java (5 repos):** 14 findings from 2 repos (`onedev`: 7, `vert.x`: 7). `logstash`, `Arduino`, `CircleImageView` were clean.
+  - `onedev`: 4 FPs from minified xterm.js bundles (`t.FourKeyMap=t.TwoKeyMap=void`), 3 CONFIRMED Tanuki wrapper license keys (LOW)
+  - `vert.x`: 2 FPs from Javadoc PEM examples, 5 FPs from TLS test fixture PEM arrays (all FALSE_POSITIVE)
+- **Python (5 repos):** 8 findings from 3 repos (`py12306`: 7, `llmware`: 1, `social-engineer-toolkit`: 1). `memray`, `XSStrike` were clean.
+  - `py12306`: 1 CONFIRMED ruokuai captcha API key (MEDIUM), 4 FPs from minified vendor.js bundles, 1 FP config placeholder, 1 FP docstring param
+  - `llmware`: 1 FP HuggingFace repo name (`llmware/bonchon`)
+  - `social-engineer-toolkit`: 1 CONFIRMED hardcoded private key in F5 CVE exploit (HIGH)
+- **Learning:** At ~15k stars, minified JS bundles become the dominant false positive source (8/18 = 44%). Mature projects still contain real secrets in integration/exploit code. Javadoc examples and test fixture PEM data are reliable FP patterns for Java projects.
+- **Tooling:** Background terminal mode essential for cloning large repos (logstash >120s). `execute_code` 300s timeout kills foreground clone operations.
+- **New rules:** 2 dead rules (minified JS, Javadoc PEM examples) + 3 semantic rules (minified JS analysis, Javadoc example keys, test PEM fixtures).

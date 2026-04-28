@@ -84,7 +84,7 @@ def main():
     parser.add_argument("repos", nargs="*", help="Repository paths to scan")
     parser.add_argument("--list-file", help="JSON file with repo list (from search)")
     parser.add_argument("--base-dir", default=str(Path.cwd()), help="Base directory for repo list resolution")
-    parser.add_argument("--output", default="/tmp/batch-scan-findings.json", help="Output file path")
+    parser.add_argument("--output", default=str(TMP_DIR / "batch-scan-findings.json"), help="Output file path")
 
     args = parser.parse_args()
 

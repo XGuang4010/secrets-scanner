@@ -1,0 +1,57 @@
+---
+pattern_id: semantic-oauth-public-identifiers
+pattern_name: "OAuth Client IDs and Public Product Identifiers"
+version: 1
+created: "2026-04-28"
+last_updated: "2026-04-28"
+validated_scans: 1
+hit_count: 6
+
+trigger_rules:
+  - generic-api-key
+
+decision_tree:
+  - step: 1
+    name: "check_oauth_client_id"
+    description: "Check if match contains OAuth client ID variable"
+    context_signals:
+      content_patterns:
+        - "_OAUTH_CLIENT_ID\\s*="
+        - "_CLIENT_ID\\s*="
+    judgment: "FALSE_POSITIVE"
+    confidence: "high"
+    reason: "OAuth client IDs are public by design and not secrets"
+
+  - step: 2
+    name: "check_public_client_secret"
+    description: "Check if variable explicitly indicates public/non-confidential secret"
+    context_signals:
+      content_patterns:
+        - "_PUBLIC_CLIENT_SECRET"
+      variable_names:
+        - "_PUBLIC_CLIENT_SECRET_SUFFIX"
+    judgment: "FALSE_POSITIVE"
+    confidence: "high"
+    reason: "Explicitly marked as public/non-confidential client secret suffix"
+
+  - step: 3
+    name: "check_voice_id"
+    description: "Check if match is a voice ID constant"
+    context_signals:
+      content_patterns:
+        - "VOICE_ID\\s*="
+      variable_names:
+        - "VAPI_DEFAULT_VOICE_ID"
+    judgment: "FALSE_POSITIVE"
+    confidence: "high"
+    reason: "Voice IDs are public product identifiers, not secrets"
+
+dead_rule_derivation:
+  allowlist_regexes:
+    - "_PUBLIC_CLIENT_SECRET"
+
+hit_stats:
+  total_hits: 6
+  confirmed_as_fp: 6
+  confirmed_as_real: 0
+  last_hit_scan: "20260428-hermes-agent"

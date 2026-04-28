@@ -1,1 +1,3 @@
-pyyaml
+# PyYAML is used by scripts/semantic-rule-stats.py to parse semantic rule YAML files.
+# Core scanning scripts (scan.py, check-gitleaks.py) do NOT require this package.
+PyYAML

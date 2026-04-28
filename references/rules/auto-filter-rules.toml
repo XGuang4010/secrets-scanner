@@ -1,5 +1,5 @@
 title = "AI-Generated Filter Rules"
-last_updated = "2026-04-28T08:00:58.183726+00:00"
+last_updated = "2026-04-28T13:48:18.143239+00:00"
 
 [[rules]]
 id = "auto-filter-craft-fixture-tokens-20260428"
@@ -54,4 +54,32 @@ source_scans = ["20260428-054959"]
 [rules.allowlist]
 paths = [
   '''.*templates/tests/.*\.twig''',
+]
+
+[[rules]]
+id = "auto-filter-doc-placeholders-20260428"
+description = "Filter placeholder tokens in documentation (YOUR_TOKEN, change-me-local-dev, ADMIN_TOKEN) (5 matches in hermes-agent scan)"
+status = "confirmed"
+created = "2026-04-28"
+validated_at = "2026-04-28"
+validation_count = 3
+source_scans = ["20260428-hermes-agent"]
+[rules.allowlist]
+regexes = [
+  '''YOUR_TOKEN''',
+  '''change-me-local-dev''',
+  '''ADMIN_TOKEN''',
+]
+
+[[rules]]
+id = "auto-filter-test-jwt-header-20260428"
+description = "Filter standard test JWT header fragment used in test code (1 match in hermes-agent scan)"
+status = "confirmed"
+created = "2026-04-28"
+validated_at = "2026-04-28"
+validation_count = 3
+source_scans = ["20260428-hermes-agent"]
+[rules.allowlist]
+regexes = [
+  '''eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9''',
 ]

@@ -61,3 +61,6 @@ def validate(finding: dict) -> dict:
             "detail": f"网络错误: {type(e).__name__}",
             "validator": "stripe",
         }
+
+# Auto-registered rule IDs for dynamic plugin discovery
+RULE_IDS = ["stripe-api-key", "stripe-secret-key"]

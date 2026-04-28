@@ -1,9 +1,16 @@
 # Gitleaks precompiled binaries
 tools/gitleaks-*
 
+# Verification cache
+tools/.verified.json
+
+# Learning data (ephemeral, per-scan)
+.learning/
+
 # Temporary files
 /tmp/
 *.tmp
+Temp-*.md
 
 # Python cache
 __pycache__/

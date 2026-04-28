@@ -5,7 +5,7 @@ Scan orchestrator for secrets-scanner.
 Phases:
   1. Preflight: detect platform, verify gitleaks binary, merge rules
   2. Detection: run gitleaks, extract context for each finding
-  3. Output: write /tmp/scan-findings.json for AI classification
+  3. Output: write scan-findings.json to the system temp directory for AI classification
 
 Usage:
   python scripts/scan.py --preflight
@@ -19,6 +19,7 @@ import os
 import platform
 import subprocess
 import sys
+import tempfile
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -29,13 +30,17 @@ TOOLS_DIR = SKILL_DIR / "tools"
 RULES_DIR = SKILL_DIR / "references" / "rules"
 LEARNING_DIR = SKILL_DIR / ".learning"
 MANIFEST_PATH = TOOLS_DIR / "manifest.json"
-TMP_DIR = Path("/tmp")
+TMP_DIR = Path(tempfile.gettempdir())
+VERIFIED_STAMP = TOOLS_DIR / ".verified.json"
 
 PLATFORM_MAP = {
     "Linux-x86_64": "linux-x86_64",
     "Linux-aarch64": "linux-aarch64",
     "Darwin-x86_64": "darwin-x86_64",
     "Darwin-arm64": "darwin-arm64",
+    "Windows-AMD64": "windows-x86_64",
+    "Windows-amd64": "windows-x86_64",
+    "Windows-arm64": "windows-arm64",
 }
 
 
@@ -51,11 +56,38 @@ def detect_platform():
     return mapped
 
 
-def get_binary_path():
-    """Locate gitleaks binary based on platform."""
+def _load_config():
+    """Read config.yaml (minimal parser, no external deps)."""
+    config_path = SKILL_DIR / "config.yaml"
+    data = {}
+    current_section = None
+    if not config_path.exists():
+        return data
+    with open(config_path, "r", encoding="utf-8") as f:
+        for line in f:
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            if stripped.endswith(":") and "=" not in stripped:
+                current_section = stripped[:-1]
+                data[current_section] = {}
+                continue
+            if ":" in stripped:
+                key, val = stripped.split(":", 1)
+                key = key.strip()
+                val = val.strip().strip('"').strip("'")
+                if current_section:
+                    data[current_section][key] = val
+                else:
+                    data[key] = val
+    return data
+
+
+def _load_manifest():
+    """Load manifest.json with error handling."""
     try:
-        with open(MANIFEST_PATH, "r") as f:
-            manifest = json.load(f)
+        with open(MANIFEST_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
     except FileNotFoundError:
         print(f"ERROR: Manifest not found at {MANIFEST_PATH}")
         sys.exit(1)
@@ -63,19 +95,33 @@ def get_binary_path():
         print(f"ERROR: Invalid manifest JSON: {e}")
         sys.exit(1)
 
+
+def get_binary_path():
+    """Locate gitleaks binary based on config.yaml or manifest."""
+    # 1. Check config.yaml for explicit binary path
+    config = _load_config()
+    cfg_binary = config.get("gitleaks", {}).get("binary_path", "").strip()
+    if cfg_binary:
+        p = Path(cfg_binary)
+        if p.is_absolute():
+            if p.exists():
+                return p
+        else:
+            resolved = SKILL_DIR / p
+            if resolved.exists():
+                return resolved
+        # Config path points to a non-existent binary (e.g., cross-platform
+        # config drift). Fall through to manifest inference rather than failing.
+
+    # 2. Fallback to manifest-based inference
+    manifest = _load_manifest()
     plat = detect_platform()
     binary_name = manifest.get("binaries", {}).get(plat)
     if not binary_name:
         print(f"ERROR: No binary configured for platform: {plat}")
         sys.exit(1)
 
-    binary_path = TOOLS_DIR / binary_name
-    if not binary_path.exists():
-        print(f"ERROR: Binary not found: {binary_path}")
-        print("Run: python scripts/update-gitleaks.py")
-        sys.exit(1)
-
-    return binary_path
+    return TOOLS_DIR / binary_name
 
 
 def verify_binary(binary_path):
@@ -85,43 +131,278 @@ def verify_binary(binary_path):
             [str(binary_path), "version"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
             timeout=10,
         )
         if result.returncode != 0:
             print(f"ERROR: Binary verification failed: {result.stderr.strip()}")
             sys.exit(1)
-        print(f"[OK] gitleaks: {result.stdout.strip()}")
+        return result.stdout.strip()
     except Exception as e:
         print(f"ERROR: Cannot execute binary: {e}")
         sys.exit(1)
 
 
+def _read_verified_stamp():
+    """Read cached verification state."""
+    if not VERIFIED_STAMP.exists():
+        return None
+    try:
+        with open(VERIFIED_STAMP, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
+def _write_verified_stamp(binary_path, version):
+    """Cache verification state so future scans skip the version call."""
+    try:
+        stat = binary_path.stat()
+        data = {
+            "path": str(binary_path),
+            "mtime": stat.st_mtime,
+            "size": stat.st_size,
+            "version": version,
+            "checked_at": datetime.now(timezone.utc).isoformat(),
+        }
+        with open(VERIFIED_STAMP, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+    except OSError:
+        pass
+
+
+def _is_verified(binary_path):
+    """Return True if binary has not changed since last successful verification."""
+    stamp = _read_verified_stamp()
+    if not stamp:
+        return False
+    if stamp.get("path") != str(binary_path):
+        return False
+    try:
+        stat = binary_path.stat()
+        return (
+            stamp.get("mtime") == stat.st_mtime
+            and stamp.get("size") == stat.st_size
+        )
+    except OSError:
+        return False
+
+
+def _ensure_gitleaks():
+    """Ensure gitleaks binary is present and working with minimal overhead.
+
+    Uses a fingerprint-based verification cache to avoid spawning the binary
+    on every scan. Only re-verifies when the binary changes (mtime/size).
+    Falls back to auto-install via check-gitleaks.py when the binary is
+    missing or broken.
+    """
+    binary_path = get_binary_path()
+
+    # Fast path: cached verification
+    if _is_verified(binary_path):
+        return binary_path
+
+    # Verify binary (slow path)
+    if binary_path.exists():
+        version_str = verify_binary(binary_path)
+        _write_verified_stamp(binary_path, version_str)
+        return binary_path
+
+    # Missing binary — attempt auto-install once
+    check_script = SCRIPT_DIR / "check-gitleaks.py"
+    if not check_script.exists():
+        print(f"ERROR: gitleaks binary missing and {check_script} not found")
+        sys.exit(1)
+
+    print("[INFO] gitleaks not found; auto-installing...")
+    result = subprocess.run(
+        [sys.executable, str(check_script), "--install"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=300,
+    )
+    if result.returncode != 0:
+        print("ERROR: Auto-install failed")
+        if result.stderr:
+            print(result.stderr)
+        sys.exit(1)
+
+    # Re-resolve path after install (config/manifest may have been updated)
+    binary_path = get_binary_path()
+    if not binary_path.exists():
+        print(f"ERROR: Binary still missing after install: {binary_path}")
+        sys.exit(1)
+
+    version_str = verify_binary(binary_path)
+    _write_verified_stamp(binary_path, version_str)
+    return binary_path
+
+
+def _parse_filter_allowlists(filter_path):
+    """Parse auto-filter-rules.toml and extract all allowlist regexes/paths.
+
+    Returns: (regexes_list, paths_list)
+    """
+    if not filter_path.exists():
+        return [], []
+
+    content = filter_path.read_text(encoding="utf-8")
+    regexes = []
+    paths = []
+
+    lines = content.splitlines()
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        # Match [[rules.allowlists]] or [rules.allowlist] or [allowlist]
+        if line.strip() in ("[[rules.allowlists]]", "[rules.allowlist]", "[allowlist]"):
+            i += 1
+            # Read until next [[rules]] or EOF or blank line that ends block
+            while i < len(lines):
+                sub = lines[i].strip()
+                if sub.startswith("[[") or sub.startswith("[") and "allowlist" not in sub:
+                    break
+                if sub.startswith("regexes"):
+                    # Multi-line array
+                    val = sub.split("=", 1)[1].strip() if "=" in sub else ""
+                    if val.startswith("["):
+                        arr_lines = [val]
+                        while not arr_lines[-1].rstrip().endswith("]"):
+                            i += 1
+                            if i >= len(lines):
+                                break
+                            arr_lines.append(lines[i].strip())
+                        arr_text = " ".join(arr_lines)
+                        # Extract triple-quoted strings
+                        parts = arr_text.split("'''")
+                        for j in range(1, len(parts), 2):
+                            if j < len(parts):
+                                regexes.append(parts[j])
+                elif sub.startswith("paths"):
+                    val = sub.split("=", 1)[1].strip() if "=" in sub else ""
+                    if val.startswith("["):
+                        arr_lines = [val]
+                        while not arr_lines[-1].rstrip().endswith("]"):
+                            i += 1
+                            if i >= len(lines):
+                                break
+                            arr_lines.append(lines[i].strip())
+                        arr_text = " ".join(arr_lines)
+                        parts = arr_text.split("'''")
+                        for j in range(1, len(parts), 2):
+                            if j < len(parts):
+                                paths.append(parts[j])
+                i += 1
+            continue
+        i += 1
+
+    return regexes, paths
+
+
 def merge_rules():
-    """Merge base rules + auto-filter rules into single config."""
+    """Merge base rules + auto-filter allowlists into single config.
+
+    gitleaks v8.30+ does not allow [[rules]] without a regex field.
+    Auto-filter entries (pure allowlists) are merged into the global
+    [allowlist] section of the base config instead of being appended as
+    standalone rules.
+    """
     base_path = RULES_DIR / "gitleaks-base.toml"
     filter_path = RULES_DIR / "auto-filter-rules.toml"
     merged_path = TMP_DIR / "gitleaks-merged.toml"
 
     if not base_path.exists():
         print(f"WARNING: Base rules not found at {base_path}")
-        # Use gitleaks default rules
         return None
 
-    lines = []
-    # Read base rules
-    lines.append(f"# Base rules from {base_path.name}\n")
-    lines.append(base_path.read_text(encoding="utf-8"))
-    lines.append("\n")
+    base_text = base_path.read_text(encoding="utf-8")
 
-    # Read auto-filter rules if exists
-    if filter_path.exists():
-        lines.append(f"# Auto-filter rules from {filter_path.name}\n")
-        lines.append(filter_path.read_text(encoding="utf-8"))
-        lines.append("\n")
+    # Extract auto-filter allowlist entries
+    filter_regexes, filter_paths = _parse_filter_allowlists(filter_path)
+    print(f"[INFO] Auto-filter entries: {len(filter_regexes)} regexes, {len(filter_paths)} paths")
 
-    merged_path.write_text("".join(lines), encoding="utf-8")
+    if not filter_regexes and not filter_paths:
+        # No filter rules to merge; use base as-is
+        merged_path.write_text(base_text, encoding="utf-8")
+        print(f"[OK] Using base rules only -> {merged_path}")
+        return merged_path
+
+    # Find the global [allowlist] section in base and insert filter entries
+    lines = base_text.splitlines()
+    in_allowlist = False
+    in_regexes = False
+    in_paths = False
+    regexes_end_idx = -1
+    paths_end_idx = -1
+    regexes_indent = "    "
+    paths_indent = "    "
+
+    for idx, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped == "[allowlist]":
+            in_allowlist = True
+            continue
+        if in_allowlist and stripped.startswith("[["):
+            in_allowlist = False
+            continue
+
+        if in_allowlist and stripped.startswith("regexes"):
+            in_regexes = True
+            regexes_indent = line[:len(line) - len(line.lstrip())]
+            if stripped.rstrip().endswith("]"):
+                regexes_end_idx = idx
+                in_regexes = False
+            continue
+        if in_regexes:
+            if stripped.rstrip().endswith("]"):
+                regexes_end_idx = idx
+                in_regexes = False
+            continue
+
+        if in_allowlist and stripped.startswith("paths"):
+            in_paths = True
+            paths_indent = line[:len(line) - len(line.lstrip())]
+            if stripped.rstrip().endswith("]"):
+                paths_end_idx = idx
+                in_paths = False
+            continue
+        if in_paths:
+            if stripped.rstrip().endswith("]"):
+                paths_end_idx = idx
+                in_paths = False
+            continue
+
+    # Build new lines
+    new_lines = list(lines)
+    inserted = 0
+
+    if regexes_end_idx >= 0 and filter_regexes:
+        # Insert before the closing ] of regexes array
+        insert_lines = []
+        for rx in filter_regexes:
+            insert_lines.append(f"{regexes_indent}  '''{rx}''',")
+        new_lines = new_lines[:regexes_end_idx + inserted] + insert_lines + new_lines[regexes_end_idx + inserted:]
+        inserted += len(insert_lines)
+        print(f"[OK] Merged {len(filter_regexes)} auto-filter regexes into global allowlist")
+
+    if paths_end_idx >= 0 and filter_paths:
+        # Adjust index if regexes were inserted before it
+        adjusted_paths_idx = paths_end_idx + inserted if paths_end_idx > regexes_end_idx else paths_end_idx
+        insert_lines = []
+        for p in filter_paths:
+            insert_lines.append(f"{paths_indent}  '''{p}''',")
+        new_lines = new_lines[:adjusted_paths_idx] + insert_lines + new_lines[adjusted_paths_idx:]
+        print(f"[OK] Merged {len(filter_paths)} auto-filter paths into global allowlist")
+
+    merged_path.write_text("\n".join(new_lines), encoding="utf-8")
     print(f"[OK] Merged rules -> {merged_path}")
     return merged_path
+
+
+def _is_git_repo(repo_path):
+    """Check if the given path is a git repository."""
+    return (Path(repo_path) / ".git").exists()
 
 
 def run_gitleaks(binary_path, repo_path, config_path=None):
@@ -137,11 +418,23 @@ def run_gitleaks(binary_path, repo_path, config_path=None):
         "--report-path", str(report_path),
     ]
 
+    # Non-git directories require --no-git to scan files directly
+    if not _is_git_repo(repo_path):
+        cmd.append("--no-git")
+        print(f"[INFO] Non-git directory detected, adding --no-git")
+
     if config_path and config_path.exists():
         cmd.extend(["--config", str(config_path)])
 
     print(f"[RUN] {' '.join(cmd)}")
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8")
+
+    # Detect config errors even if returncode is 1
+    stderr_lower = result.stderr.lower()
+    if "unable to load gitleaks config" in stderr_lower or "toml" in stderr_lower:
+        print(f"ERROR: gitleaks config error (code {result.returncode})")
+        print(f"STDERR: {result.stderr}")
+        sys.exit(1)
 
     # gitleaks exits with code 1 when findings exist
     if result.returncode not in (0, 1):
@@ -278,8 +571,8 @@ def rotate_learning_directory():
 def preflight():
     """Run preflight checks."""
     print("=== Phase 1: Preflight ===")
-    binary_path = get_binary_path()
-    verify_binary(binary_path)
+
+    binary_path = _ensure_gitleaks()
     merge_rules()
     rotate_learning_directory()
     print("[OK] Preflight complete\n")

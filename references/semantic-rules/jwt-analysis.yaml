@@ -38,6 +38,17 @@ decision_tree:
     reason: "被截断的 JWT 是文档示例，不是真实密钥"
     
   - step: 4
+    name: "check_expired_token"
+    description: "检查 token 是否被显式标记为过期"
+    signals:
+      - "注释中包含 'expired' + 'token'"
+      - "变量名包含 'EXPIRED_TOKEN'"
+      - "注释中包含 'expired sponsor token'"
+    judgment_if_match: "FALSE_POSITIVE"
+    confidence: "high"
+    reason: "显式标记为过期的 token 不是真实凭证"
+
+  - step: 5
     name: "check_file_context"
     description: "检查文件类型和位置"
     contexts:

@@ -16,12 +16,9 @@ def _validate_wechat_pay(finding: dict) -> dict:
 
 
 def _validate_fiat(finding: dict) -> dict:
-    """Fiat endpoint unknown; not testable in a safe read-only manner."""
-    return {
-        "status": "NOT_TESTABLE",
-        "detail": "Fiat API 端点未知，无法安全验证",
-        "validator": "fiat",
-    }
+    """Route to dedicated Fiat validator."""
+    from . import fiat
+    return fiat.validate(finding)
 
 
 def _validate_unknown_generic(finding: dict) -> dict:
@@ -106,5 +103,26 @@ def validate(finding: dict) -> dict:
     if "hyundai" in text or "bluelink" in text or "ccsp" in text:
         from . import hyundai
         return hyundai.validate(finding)
+    if any(b in text for b in ("citroen", "peugeot", "opel", "driveds", "psa")):
+        from . import psa
+        return psa.validate(finding)
+    if "toyota" in text:
+        from . import toyota
+        return toyota.validate(finding)
+    if "renault" in text or "gigya" in text or "kamereon" in text:
+        from . import renault
+        return renault.validate(finding)
+    if "nissan" in text:
+        from . import nissan
+        return nissan.validate(finding)
+    if "subaru" in text:
+        from . import subaru
+        return subaru.validate(finding)
+    if any(b in text for b in ("volkswagen", "vwgroup", "weconnect", "seat", "skoda", "cupra", "vw")):
+        from . import vw
+        return vw.validate(finding)
 
     return _validate_unknown_generic(finding)
+
+# Auto-registered rule IDs for dynamic plugin discovery
+RULE_IDS = ["generic-api-key", "private-key", "jwt"]

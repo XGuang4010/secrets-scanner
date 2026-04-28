@@ -1,0 +1,46 @@
+---
+pattern_id: semantic-firebase-storage-token
+pattern_name: "Firebase Storage Public Download Token"
+version: 1
+created: "2026-04-28"
+last_updated: "2026-04-28"
+validated_scans: 1
+hit_count: 653
+
+trigger_rules:
+  - generic-api-key
+
+decision_tree:
+  - step: 1
+    name: "check_uuid_format"
+    description: "Check if secret is a UUID"
+    context_signals:
+      content_patterns:
+        - "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    judgment: "NEEDS_REVIEW"
+    confidence: "low"
+    reason: "UUID alone is not enough to classify"
+
+  - step: 2
+    name: "check_markdown_image_url"
+    description: "Check if match is in a markdown image URL with token parameter"
+    context_signals:
+      content_patterns:
+        - "token=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+        - "<img\\s+src="
+        - "appspot\\.com|firebase|gitbook"
+      file_patterns:
+        - ".*\\.md$"
+    judgment: "FALSE_POSITIVE"
+    confidence: "high"
+    reason: "Firebase Storage public download token in markdown image URL. These are automatically generated public sharing tokens, not secrets."
+
+dead_rule_derivation:
+  allowlist_paths:
+    - ".*unsloth/references/.*\\.md$"
+
+hit_stats:
+  total_hits: 653
+  confirmed_as_fp: 653
+  confirmed_as_real: 0
+  last_hit_scan: "20260428-hermes-agent"

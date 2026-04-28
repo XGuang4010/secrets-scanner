@@ -1,0 +1,48 @@
+---
+pattern_id: semantic-minified-js-analysis
+pattern_name: "Minified JavaScript Bundle Semantic Analysis"
+version: 1
+created: "2026-04-27"
+last_updated: "2026-04-27"
+validated_scans: 1
+hit_count: 8
+
+trigger_rules:
+  - generic-api-key
+
+decision_tree:
+  - step: 1
+    name: "check_file_type"
+    description: "Check if finding is in a minified JS bundle file"
+    context_signals:
+      file_patterns:
+        - ".*\.js$"
+        - ".*vendor\.[a-f0-9]+\.js$"
+        - ".*xterm.*\.js$"
+        - ".*bundle.*\.js$"
+    judgment: "NEEDS_REVIEW"
+    confidence: "low"
+    reason: "JS files may contain real API keys in config objects"
+
+  - step: 2
+    name: "check_match_pattern"
+    description: "Check if match is a minified variable assignment chain"
+    context_signals:
+      content_patterns:
+        - "t\\.[A-Za-z]+=t\\.[A-Za-z]+=void"
+        - "[a-z]\\.[A-Za-z]+=[a-z]\\.[A-Za-z]+=void"
+    judgment: "FALSE_POSITIVE"
+    confidence: "high"
+    reason: "Minified JS variable assignments are not real API keys"
+
+dead_rule_derivation:
+  allowlist_paths:
+    - ".*vendor\.[a-f0-9]+\.js$"
+  allowlist_regexes:
+    - "t\\.[A-Za-z]+=t\\.[A-Za-z]+(?:=t\\.[A-Za-z]+)?=void"
+
+hit_stats:
+  total_hits: 8
+  confirmed_as_fp: 8
+  confirmed_as_real: 0
+  last_hit_scan: "batch-20260427-030612"

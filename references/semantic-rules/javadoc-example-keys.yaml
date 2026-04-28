@@ -1,0 +1,48 @@
+---
+pattern_id: semantic-javadoc-example-keys
+pattern_name: "Java Documentation Example Keys"
+version: 1
+created: "2026-04-27"
+last_updated: "2026-04-27"
+validated_scans: 1
+hit_count: 2
+
+trigger_rules:
+  - private-key
+
+decision_tree:
+  - step: 1
+    name: "check_javadoc_context"
+    description: "Check if match is inside a Javadoc comment block"
+    context_signals:
+      content_patterns:
+        - "^\\s*\\* "
+        - "^\\s*/\\*\\*"
+      nearby_keywords:
+        - "example"
+        - "for example"
+        - "must contain"
+    judgment: "FALSE_POSITIVE"
+    confidence: "high"
+    reason: "Javadoc comments with PEM examples are documentation"
+
+  - step: 2
+    name: "check_redacted_marker"
+    description: "Check if content is explicitly redacted"
+    context_signals:
+      content_patterns:
+        - "\\[REDACTED PRIVATE KEY\\]"
+    judgment: "FALSE_POSITIVE"
+    confidence: "high"
+    reason: "Explicitly redacted content is not a real secret"
+
+dead_rule_derivation:
+  allowlist_regexes:
+    - "\\* \[REDACTED PRIVATE KEY\]"
+    - "\\* -----BEGIN (RSA )?PRIVATE KEY-----"
+
+hit_stats:
+  total_hits: 2
+  confirmed_as_fp: 2
+  confirmed_as_real: 0
+  last_hit_scan: "batch-20260427-030612"

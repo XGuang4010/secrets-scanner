@@ -1,0 +1,114 @@
+---
+pattern_id: semantic-test-and-docs-patterns
+pattern_name: "Test Data and Documentation Placeholder Patterns"
+version: 1
+created: "2026-04-28"
+last_updated: "2026-04-28"
+validated_scans: 1
+hit_count: 98
+
+trigger_rules:
+  - generic-api-key
+  - private-key
+  - discord-client-id
+  - mattermost-access-token
+  - curl-auth-header
+  - telegram-bot-api-token
+
+decision_tree:
+  - step: 1
+    name: "check_obvious_fake_secret"
+    description: "Check for common fake secret patterns in code"
+    context_signals:
+      content_patterns:
+        - "abc123"
+        - "test-api-key"
+        - "test-secret"
+        - "fake_"
+        - "placeholder"
+        - "example"
+        - "allascii"
+        - "shortkey"
+        - "resolve-789"
+        - "env-api-key"
+        - "mm-tok-"
+        - "sk-or-v1-abcdefghijklmnop"
+        - "ya29\\.injected"
+    judgment: "FALSE_POSITIVE"
+    confidence: "high"
+    reason: "Test/example secrets with obvious fake patterns (abc123, test-, fake_, etc.)"
+
+  - step: 2
+    name: "check_documentation_placeholder"
+    description: "Check for placeholder tokens in documentation"
+    context_signals:
+      content_patterns:
+        - "YOUR_TOKEN"
+        - "change-me"
+        - "ADMIN_TOKEN"
+        - "Bearer\\s+YOUR"
+      file_patterns:
+        - ".*website/docs/.*"
+        - ".*\\.md$"
+    judgment: "FALSE_POSITIVE"
+    confidence: "high"
+    reason: "Placeholder values in documentation examples"
+
+  - step: 3
+    name: "check_user_id_example"
+    description: "Check for platform user/channel ID examples"
+    context_signals:
+      content_patterns:
+        - "ALLOWED_USERS\\s*=\\s*\\d+"
+        - "HOME_CHANNEL\\s*=\\s*\\w+"
+        - "HOME_CHANNEL\\s*=\\s*\\d+"
+    judgment: "FALSE_POSITIVE"
+    confidence: "high"
+    reason: "Discord/Mattermost user/channel IDs in configuration examples are not secrets"
+
+  - step: 4
+    name: "check_regex_literal"
+    description: "Check if match is a regex pattern definition for secret detection"
+    context_signals:
+      content_patterns:
+        - "re\\.compile\\s*\\("
+        - "RegExp\\s*\\("
+        - "Pattern\\.compile"
+        - "PRIVATE KEY"
+    judgment: "FALSE_POSITIVE"
+    confidence: "high"
+    reason: "Regex pattern literals for detecting secrets are not secrets themselves"
+
+  - step: 5
+    name: "check_standard_jwt_header"
+    description: "Check for standard test JWT header fragments"
+    context_signals:
+      content_patterns:
+        - "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"
+        - "eyJ0eXAiOiJKV1Q"
+    judgment: "FALSE_POSITIVE"
+    confidence: "high"
+    reason: "Standard test JWT header fragments used in test code"
+
+  - step: 6
+    name: "check_mock_module"
+    description: "Check for mock module names in tests"
+    context_signals:
+      content_patterns:
+        - "lark_oapi\\.api\\.im\\.v1"
+    judgment: "FALSE_POSITIVE"
+    confidence: "high"
+    reason: "Mock module path in test stub, not a secret"
+
+dead_rule_derivation:
+  allowlist_regexes:
+    - "YOUR_TOKEN"
+    - "change-me-local-dev"
+    - "ADMIN_TOKEN"
+    - "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"
+
+hit_stats:
+  total_hits: 98
+  confirmed_as_fp: 98
+  confirmed_as_real: 0
+  last_hit_scan: "20260428-hermes-agent"

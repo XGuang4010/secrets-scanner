@@ -1,0 +1,58 @@
+---
+pattern_id: semantic-test-pem-fixtures
+pattern_name: "Test Fixture PEM Data"
+version: 1
+created: "2026-04-27"
+last_updated: "2026-04-27"
+validated_scans: 1
+hit_count: 5
+
+trigger_rules:
+  - private-key
+
+decision_tree:
+  - step: 1
+    name: "check_test_file"
+    description: "Check if file is a test file"
+    context_signals:
+      file_patterns:
+        - ".*Test\.java$"
+        - ".*/tests/.*"
+    judgment: "NEEDS_REVIEW"
+    confidence: "low"
+    reason: "Test files can contain real keys used for testing"
+
+  - step: 2
+    name: "check_test_fixture_array"
+    description: "Check if PEM content is in a test fixture array"
+    context_signals:
+      content_patterns:
+        - "String\[\]\s+\w+\s*=\s*\{"
+      variable_names:
+        - "contents"
+        - "testData"
+        - "fixtures"
+    judgment: "FALSE_POSITIVE"
+    confidence: "medium"
+    reason: "PEM strings in test fixture arrays are test data"
+
+  - step: 3
+    name: "check_error_messages"
+    description: "Check if match is an error message about PEM"
+    context_signals:
+      content_patterns:
+        - "Missing.*PRIVATE KEY.*delimiter"
+    judgment: "FALSE_POSITIVE"
+    confidence: "high"
+    reason: "Error message strings are not real private keys"
+
+dead_rule_derivation:
+  allowlist_paths:
+    - ".*Test\.java$"
+    - ".*/tests/.*"
+
+hit_stats:
+  total_hits: 5
+  confirmed_as_fp: 5
+  confirmed_as_real: 0
+  last_hit_scan: "batch-20260427-030612"

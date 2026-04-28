@@ -1,0 +1,5 @@
+gitleaks:
+  version: "8.30.1"
+  binary_path: ""
+  auto_install: true
+  download_url_template: "https://github.com/gitleaks/gitleaks/releases/download/v{version}/gitleaks_{version}_{platform}.tar.gz"

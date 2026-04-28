@@ -53,7 +53,7 @@ def _discover_plugins():
         # Skip already-known modules (backward compat)
         already_registered = name in {
             "aws", "stripe", "hyundai", "generic", "fiat", "psa",
-            "toyota", "renault", "nissan", "subaru", "vw",
+            "toyota", "renault", "nissan", "subaru", "vw", "github_pat",
         }
         if already_registered:
             continue

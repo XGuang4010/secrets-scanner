@@ -15,6 +15,9 @@ Output:
 import json
 import sys
 from collections import defaultdict
+
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
 from datetime import datetime
 from pathlib import Path
 

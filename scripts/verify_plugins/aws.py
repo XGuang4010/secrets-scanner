@@ -134,3 +134,6 @@ def validate(finding: dict) -> dict:
             "detail": f"网络错误: {type(e).__name__}",
             "validator": "aws",
         }
+
+# Auto-registered rule IDs for dynamic plugin discovery
+RULE_IDS = ["aws-access-key", "aws-secret-access-key"]

@@ -5,6 +5,9 @@
     "linux-x86_64": "gitleaks-linux-x64",
     "linux-aarch64": "gitleaks-linux-arm64",
     "darwin-x86_64": "gitleaks-darwin-x64",
-    "darwin-arm64": "gitleaks-darwin-arm64"
+    "darwin-arm64": "gitleaks-darwin-arm64",
+    "windows-x86_64": "gitleaks-windows-x64.exe",
+    "windows-amd64": "gitleaks-windows-x64.exe",
+    "windows-arm64": "gitleaks-windows-arm64.exe"
   }
 }
